@@ -18,15 +18,56 @@ function negLog10Sql(expr: string) {
   END`
 }
 
-export function parseNumericFilter(filterValue: string) {
+export type NumericComparison = { operator: string; value: number }
+// OR of AND-groups: [[a, b], [c]] means (a AND b) OR c.
+export type NumericFilterExpression = NumericComparison[][]
+
+const FILTER_NUMBER = /^-?\d+(?:\.\d+)?$/
+export function isFilterNumber(text: string) {
+  return FILTER_NUMBER.test(text.trim())
+}
+
+function parseNumericComparison(text: string): NumericComparison | null {
+  const match = text.trim().match(/^(<=|>=|<|>|=)?\s*(-?\d+(?:\.\d+)?)$/)
+  if (!match) return null
+  return { operator: match[1] ?? "=", value: Number(match[2]) }
+}
+
+// Accepts single comparisons ("> 5") and compounds joined by AND / OR (case-insensitive, or && / ||),
+// e.g. ">= 5 AND < 10", "< 2 or > 8". AND binds tighter than OR; no parentheses. Returns null if any
+// part fails to parse, so a typo never silently degrades into a looser filter.
+export function parseNumericFilter(filterValue: string): NumericFilterExpression | null {
   const trimmed = filterValue.trim()
   if (!trimmed) return null
-  const match = trimmed.match(/^(<=|>=|<|>|=)?\s*(-?\d+(?:\.\d+)?)$/)
-  if (!match) return null
-  return {
-    operator: match[1] ?? "=",
-    value: Number(match[2]),
+  const groups: NumericFilterExpression = []
+  for (const orPart of trimmed.split(/\s*(?:\|\||\bor\b)\s*/i)) {
+    const group: NumericComparison[] = []
+    for (const andPart of orPart.split(/\s*(?:&&|\band\b)\s*/i)) {
+      const comparison = parseNumericComparison(andPart)
+      if (!comparison) return null
+      group.push(comparison)
+    }
+    groups.push(group)
   }
+  return groups
+}
+
+export function matchesNumericFilter(value: number, expression: NumericFilterExpression) {
+  const compare = ({ operator, value: target }: NumericComparison) => {
+    switch (operator) {
+      case ">":
+        return value > target
+      case ">=":
+        return value >= target
+      case "<":
+        return value < target
+      case "<=":
+        return value <= target
+      default:
+        return value === target
+    }
+  }
+  return expression.some((group) => group.every(compare))
 }
 
 export function buildFilterConditions(columnFilters: MRT_ColumnFiltersState) {
@@ -38,7 +79,10 @@ export function buildFilterConditions(columnFilters: MRT_ColumnFiltersState) {
   const numericExpr = (sqlExpr: string, value: string) => {
     const parsed = parseNumericFilter(value)
     if (!parsed) return null
-    return `${sqlExpr} ${parsed.operator} ${parsed.value}`
+    const groups = parsed.map(
+      (group) => `(${group.map((c) => `${sqlExpr} ${c.operator} ${c.value}`).join(" AND ")})`,
+    )
+    return `(${groups.join(" OR ")})`
   }
   const numericMap: Record<string, string> = {
     binaryCasesControl: "binaryCaseYes",

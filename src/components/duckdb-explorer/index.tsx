@@ -502,6 +502,8 @@ export default function DuckDbExplorer({
     manualPagination: tableMode === "flat",
     manualSorting: tableMode === "flat",
     onColumnFiltersChange: setColumnFilters,
+    // Read by NumericFilterBuilder, whose popover has its own Apply button / Enter key.
+    meta: { applyFilters },
     muiFilterTextFieldProps: {
       onKeyDown: (event) => {
         if (event.key === "Enter") applyFilters()

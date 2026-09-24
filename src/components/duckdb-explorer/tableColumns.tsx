@@ -3,8 +3,9 @@ import { alpha, type Theme } from "@mui/material/styles"
 import type { MRT_ColumnDef, MRT_FilterFn } from "material-react-table"
 import { CasesControlCell } from "../../table/custom-cells/CasesControlsCell"
 import { CategoryBar, CategoricalDistributionBar, MeanComparisonChart } from "../Visuals"
-import { parseNumericFilter } from "./queryBuilders"
+import { matchesNumericFilter, parseNumericFilter } from "./queryBuilders"
 import type { ConceptSummaryRow } from "./types"
+import { NumericFilterBuilder } from "./UI/NumericFilterBuilder"
 import {
   MAX_NEG_LOG10,
   buildDistributionRows,
@@ -25,18 +26,13 @@ export const numericExpressionFilter: MRT_FilterFn<ConceptSummaryRow> = (
   if (!filterText) return true
   const parsed = parseNumericFilter(filterText)
   if (!parsed || value == null || Number.isNaN(value)) return false
-  switch (parsed.operator) {
-    case ">":
-      return value > parsed.value
-    case ">=":
-      return value >= parsed.value
-    case "<":
-      return value < parsed.value
-    case "<=":
-      return value <= parsed.value
-    default:
-      return value === parsed.value
-  }
+  return matchesNumericFilter(value, parsed)
+}
+
+// Shared by every numeric stat column: the block-based builder replaces MRT's plain text input.
+const numericFilterProps: Pick<MRT_ColumnDef<ConceptSummaryRow>, "filterFn" | "Filter"> = {
+  filterFn: numericExpressionFilter,
+  Filter: ({ column, table }) => <NumericFilterBuilder column={column} table={table} />,
 }
 
 function NA_Chip() {
@@ -104,7 +100,7 @@ export function makeContinuousColumns(
         id: `${prefix}Mean`,
         header: "Mean",
         accessorFn: (row) => row[`${prefix}CaseMean` as keyof ConceptSummaryRow] as number | null,
-        filterFn: numericExpressionFilter,
+        ...numericFilterProps,
         Cell: ({ row }) => {
           const caseMean = row.original[`${prefix}CaseMean` as keyof ConceptSummaryRow] as
             | number
@@ -173,7 +169,7 @@ export function makeContinuousColumns(
         header: "pVal",
         accessorFn: (row) =>
           negLog10(row[`${prefix}PValue` as keyof ConceptSummaryRow] as number | null),
-        filterFn: numericExpressionFilter,
+        ...numericFilterProps,
         Cell: ({ cell }) => logPChip(cell.getValue<number | null>()),
         size: 50,
       },
@@ -181,7 +177,7 @@ export function makeContinuousColumns(
         id: `${prefix}Effect`,
         header: "Eff.",
         accessorFn: (row) => row[`${prefix}EffectSize` as keyof ConceptSummaryRow] as number | null,
-        filterFn: numericExpressionFilter,
+        ...numericFilterProps,
         Cell: ({ cell }) => valueChip(cell.getValue<number | null>(), colorThreshold),
         size: 50,
       },
@@ -335,7 +331,7 @@ export function buildColumns(): MRT_ColumnDef<ConceptSummaryRow>[] {
           // enableColumnActions: false,
           // enableColumnOrdering: false,
           accessorFn: (row) => row.binaryCaseYes ?? null,
-          filterFn: numericExpressionFilter,
+          ...numericFilterProps,
           Cell: ({ row }) =>
             row.original.binaryCaseYes != null && row.original.binaryControlYes != null ? (
               <CasesControlCell
@@ -380,7 +376,7 @@ export function buildColumns(): MRT_ColumnDef<ConceptSummaryRow>[] {
           id: "binaryLogP",
           header: "pVal",
           accessorFn: (row) => negLog10(row.binaryPValue),
-          filterFn: numericExpressionFilter,
+          ...numericFilterProps,
           Cell: ({ cell }) => logPChip(cell.getValue<number | null>()),
           size: 80,
         },
@@ -388,7 +384,7 @@ export function buildColumns(): MRT_ColumnDef<ConceptSummaryRow>[] {
           id: "binaryEffect",
           header: "OR",
           accessorFn: (row) => row.binaryEffectSize ?? null,
-          filterFn: numericExpressionFilter,
+          ...numericFilterProps,
           Cell: ({ cell }) => valueChip(cell.getValue<number | null>(), 1.2, { tone: "primary" }),
           size: 80,
         },
@@ -406,7 +402,7 @@ export function buildColumns(): MRT_ColumnDef<ConceptSummaryRow>[] {
           id: "categoricalCasesControl",
           header: "C/C",
           accessorFn: (row) => row.categoricalCaseYes ?? null,
-          filterFn: numericExpressionFilter,
+          ...numericFilterProps,
           Cell: ({ row }) =>
             row.original.categoricalCaseYes != null &&
             row.original.categoricalControlYes != null ? (
@@ -441,7 +437,7 @@ export function buildColumns(): MRT_ColumnDef<ConceptSummaryRow>[] {
           id: "categoricalLogP",
           header: "pVal",
           accessorFn: (row) => negLog10(row.categoricalPValue),
-          filterFn: numericExpressionFilter,
+          ...numericFilterProps,
           Cell: ({ cell }) => logPChip(cell.getValue<number | null>()),
           size: 50,
         },
@@ -449,7 +445,7 @@ export function buildColumns(): MRT_ColumnDef<ConceptSummaryRow>[] {
           id: "categoricalEffect",
           header: "Effect",
           accessorFn: (row) => row.categoricalEffectSize ?? null,
-          filterFn: numericExpressionFilter,
+          ...numericFilterProps,
           Cell: ({ cell }) => valueChip(cell.getValue<number | null>(), 1.2, { tone: "primary" }),
           size: 50,
         },
