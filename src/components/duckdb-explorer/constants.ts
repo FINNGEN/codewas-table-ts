@@ -64,12 +64,23 @@ export const OVERVIEW_MAX_CONCEPTS = 5000
 export const OVERVIEW_MIN_COL_PX = 3
 // Once a column is at least this wide, every column is labelled (horizontal text needs room to read);
 // narrower than this, only the hovered/expanded column is labelled.
-export const OVERVIEW_MIN_LABEL_PX = 64
+export const OVERVIEW_MIN_LABEL_PX = 65
 // Color ramp behind the heatmap's color *fallback* (HEATMAP_ENCODING in utils/heatmapPatterns) and the
 // swatches sampled from it. Give the two ends; everything interpolates between (see rampColor in
 // utils/heatmapUtils). Cells themselves are encoded with texture — the ramp is not on that path.
 // The ramp shows evidence strength (-log10 p), so it runs along the p-value hue.
 export const OVERVIEW_RAMP_FROM = dataHues.pvalueFaint
 export const OVERVIEW_RAMP_TO = dataHues.pvalue
+// SMD color modes use a diverging blue ← neutral → red ramp instead (SMD is signed; purple stays
+// reserved for p-values). Capped mode clamps SMD to ±OVERVIEW_SMD_CAP; row-scaled mode colors the
+// per-analysis z-score and saturates at ±OVERVIEW_ROW_Z_LIMIT.
+export const OVERVIEW_DIVERGING_NEGATIVE = "#2872d9"
+export const OVERVIEW_DIVERGING_MID = "#F5F5F5"
+export const OVERVIEW_DIVERGING_POSITIVE = "#d6372c"
+export const OVERVIEW_SMD_CAP = 5
+// Cells with no value. A mid, chroma-free grey: clearly apart from the diverging ramp's near-white
+// midpoint (SMD ≈ 0) and from the p-value ramp's faint end, and legible on both light and dark paper.
+export const HEATMAP_EMPTY_COLOR = "#ececec"
+export const OVERVIEW_ROW_Z_LIMIT = 3
 // The number of steps in both heatmap scales — and so the number of draggable breakpoints on the
 // global scale (steps - 1) — comes from HEATMAP_PATTERNS.length in utils/heatmapPatterns.

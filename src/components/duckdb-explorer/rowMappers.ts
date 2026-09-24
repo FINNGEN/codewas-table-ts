@@ -144,16 +144,22 @@ export function mapHeatmapRow(row: BlockMetricRow): ConceptSummaryRow {
     bestPValue: (row.bestPValue as number | null) ?? null,
     binaryPValue: (row.binaryPValue as number | null) ?? null,
     binaryEffectSize: (row.binaryEffectSize as number | null) ?? null,
+    binarySmd: (row.binarySmd as number | null) ?? null,
     countsPValue: (row.countsPValue as number | null) ?? null,
     countsEffectSize: (row.countsEffectSize as number | null) ?? null,
+    countsSmd: (row.countsSmd as number | null) ?? null,
     agePValue: (row.agePValue as number | null) ?? null,
     ageEffectSize: (row.ageEffectSize as number | null) ?? null,
+    ageSmd: (row.ageSmd as number | null) ?? null,
     daysPValue: (row.daysPValue as number | null) ?? null,
     daysEffectSize: (row.daysEffectSize as number | null) ?? null,
+    daysSmd: (row.daysSmd as number | null) ?? null,
     continuousPValue: (row.continuousPValue as number | null) ?? null,
     continuousEffectSize: (row.continuousEffectSize as number | null) ?? null,
+    continuousSmd: (row.continuousSmd as number | null) ?? null,
     categoricalPValue: (row.categoricalPValue as number | null) ?? null,
     categoricalEffectSize: (row.categoricalEffectSize as number | null) ?? null,
+    categoricalSmd: (row.categoricalSmd as number | null) ?? null,
   }
 }
 

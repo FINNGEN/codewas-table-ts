@@ -25,9 +25,16 @@ import {
   TextField,
   Typography,
 } from "@mui/material"
-import { HEATMAP_BLOCKS, OVERVIEW_MIN_COL_PX, OVERVIEW_MIN_LABEL_PX } from "./constants"
+import {
+  HEATMAP_BLOCKS,
+  OVERVIEW_MIN_COL_PX,
+  OVERVIEW_MIN_LABEL_PX,
+  OVERVIEW_ROW_Z_LIMIT,
+  OVERVIEW_SMD_CAP,
+} from "./constants"
 import {
   computeHeatmapDerived,
+  divergingColor,
   getHeatmapHeaderLines,
   matchesHeatmapSearch,
 } from "./utils/heatmapUtils"
@@ -41,7 +48,12 @@ import {
 } from "./utils/heatmapPatterns"
 import PatternLegend from "./UI/PatternLegend"
 import { buildHierarchyIndex } from "./utils/hierarchyUtils"
-import type { ChartBlockKey, ConceptSummaryRow, HeatmapScaleMode } from "./types"
+import type {
+  ChartBlockKey,
+  ConceptSummaryRow,
+  HeatmapScaleMode,
+  OverviewColorMetric,
+} from "./types"
 import { formatNumber } from "./utils/utils"
 import MultiTrackColorSlider from "./UI/MultiTrackColorSlider"
 import { Info, Restore, Search } from "@mui/icons-material"
@@ -74,9 +86,13 @@ const VERTICAL_GUTTER = 0
 const HORIZONTAL_GUTTER = 0
 
 // Per-node rollup: MAX -log10(p) per block over the node's whole subtree (itself + all descendants),
-// plus the subtree concept count and its strongest block (for sorting and the tooltip).
+// plus the subtree concept count and its strongest block (for sorting and the tooltip). `color` is
+// the value the SMD color modes paint: per block, the subtree value furthest from zero, sign kept —
+// the raw SMD in capped mode (clamped only when painted, so the caption shows the true value) or
+// the row z-score in row-scaled mode. All-null in p-value mode, which paints from `maxLogp`.
 type SubtreeAgg = {
   maxLogp: (number | null)[]
+  color: (number | null)[]
   bestScore: number
   count: number
 }
@@ -93,11 +109,30 @@ type Column = {
 // and the pinned label of the expanded column) can be hit-tested on click.
 type LabelRect = { left: number; top: number; width: number; height: number }
 
-// What a panel is sorted by: one of the analysis blocks (by subtree -log10(p)) or the direct-child count.
+// What a panel is sorted by: one of the analysis blocks (by the active color metric) or the
+// direct-child count.
 type SortKey = { type: "block"; block: ChartBlockKey } | { type: "children" }
+
+// A column's rank value for one block under the active color metric: subtree -log10(p) in p-value
+// mode, |SMD| (or |z|) in the SMD modes. Magnitude, not the signed value, so the width cap keeps
+// strong effects in both directions instead of dropping every strongly negative one.
+function blockScore(agg: SubtreeAgg, block: number, metric: OverviewColorMetric) {
+  if (metric === "pValue") return agg.maxLogp[block]
+  const value = agg.color[block]
+  return value == null ? null : Math.abs(value)
+}
+
+// Strongest block of a column under the active metric: the tiebreak when the sorted block is equal.
+function overallScore(agg: SubtreeAgg, metric: OverviewColorMetric) {
+  if (metric === "pValue") return agg.bestScore
+  let best = 0
+  for (let b = 0; b < agg.color.length; b++) best = Math.max(best, blockScore(agg, b, metric) ?? 0)
+  return best
+}
 
 const EMPTY_AGG: SubtreeAgg = {
   maxLogp: new Array<number | null>(HEATMAP_BLOCKS.length).fill(null),
+  color: new Array<number | null>(HEATMAP_BLOCKS.length).fill(null),
   bestScore: 0,
   count: 1,
 }
@@ -124,6 +159,23 @@ function truncateToWidth(context: CanvasRenderingContext2D, text: string, maxWid
   return `${truncated}…`
 }
 
+// Saturation point of the diverging ramp per SMD mode: values at or beyond ±limit get the full hue.
+function colorLimit(metric: OverviewColorMetric) {
+  return metric === "smdRowScaled" ? OVERVIEW_ROW_Z_LIMIT : OVERVIEW_SMD_CAP
+}
+
+const COLOR_METRIC_LABEL: Record<OverviewColorMetric, string> = {
+  pValue: "max -log10(p)",
+  smdCapped: "SMD",
+  smdRowScaled: "row-scaled SMD (z)",
+}
+
+const SORT_METRIC_LABEL: Record<OverviewColorMetric, string> = {
+  pValue: "-log10(p)",
+  smdCapped: "|SMD|",
+  smdRowScaled: "|z|",
+}
+
 function conceptLabel(row: ConceptSummaryRow) {
   return row.conceptName
     ? `${row.conceptName} | ${row.conceptCode}`
@@ -136,6 +188,7 @@ function OverviewLevel({
   title,
   columns,
   activeRowKey,
+  colorMetric,
   scaleMode,
   perColumnMax,
   bucketBreakpoints,
@@ -145,6 +198,7 @@ function OverviewLevel({
   title: string
   columns: Column[]
   activeRowKey: string | null
+  colorMetric: OverviewColorMetric
   scaleMode: HeatmapScaleMode
   perColumnMax: Record<ChartBlockKey, number>
   bucketBreakpoints: number[]
@@ -154,7 +208,10 @@ function OverviewLevel({
   const containerRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [canvasWidth, setCanvasWidth] = useState(MIN_CANVAS_WIDTH)
-  const [hovered, setHovered] = useState<{ column: number; block: number } | null>(null)
+  const [hovered, setHovered] = useState<{
+    column: number
+    block: number
+  } | null>(null)
   // Column index whose header label the pointer is over (-1 = none): underlines it and swaps the
   // caption hint, so the label being clickable is discoverable.
   const [hoveredLabel, setHoveredLabel] = useState(-1)
@@ -162,7 +219,10 @@ function OverviewLevel({
   // draw pass so clicks can hit-test them.
   const labelRectsRef = useRef(new Map<number, LabelRect>())
   // null = use the relevance default (so the default stays dynamic until the user picks a row).
-  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null)
+  const [sort, setSort] = useState<{
+    key: SortKey
+    dir: "asc" | "desc"
+  } | null>(null)
 
   // The canvas paints with plain strings, so every color has to be resolved from the theme by
   // hand. It must be the theme from *context* (useTheme), not the `appTheme` object: `appTheme
@@ -204,14 +264,15 @@ function OverviewLevel({
     return () => observer.disconnect()
   }, [])
 
-  // Relevance default: the analysis with the highest summed -log10(p) across this panel's columns.
+  // Relevance default: the analysis with the highest summed score (-log10(p) or |SMD|, following the
+  // color metric) across this panel's columns.
   const relevanceBlock = useMemo(() => {
     let bestBlock = HEATMAP_BLOCKS[0]
     let bestSum = -1
     for (let b = 0; b < HEATMAP_BLOCKS.length; b++) {
       let sum = 0
       for (const column of columns) {
-        const value = column.agg.maxLogp[b]
+        const value = blockScore(column.agg, b, colorMetric)
         if (value != null) sum += value
       }
       if (sum > bestSum) {
@@ -220,7 +281,7 @@ function OverviewLevel({
       }
     }
     return bestBlock
-  }, [columns])
+  }, [colorMetric, columns])
 
   const effectiveSort: { key: SortKey; dir: "asc" | "desc" } = sort ?? {
     key: { type: "block", block: relevanceBlock },
@@ -231,29 +292,23 @@ function OverviewLevel({
   const sortByChildren = effectiveSort.key.type === "children"
 
   // Rank by the active dimension (desc, nulls last) so the width cap keeps the strongest columns;
-  // ascending just reverses the kept set for display. Tiebreak by overall bestScore, then name.
+  // ascending just reverses the kept set for display. Tiebreak by the column's strongest block under
+  // the same metric, then name.
   const ranked = useMemo(() => {
+    const overall = new Map(columns.map((c) => [c, overallScore(c.agg, colorMetric)] as const))
+    const tiebreak = (a: Column, b: Column) =>
+      (overall.get(b) ?? 0) - (overall.get(a) ?? 0) ||
+      conceptLabel(a.row).localeCompare(conceptLabel(b.row))
     return [...columns].sort((a, b) => {
-      if (sortByChildren) {
-        return (
-          b.directChildCount - a.directChildCount ||
-          b.agg.bestScore - a.agg.bestScore ||
-          conceptLabel(a.row).localeCompare(conceptLabel(b.row))
-        )
-      }
-      const av = a.agg.maxLogp[sortBlockIndex]
-      const bv = b.agg.maxLogp[sortBlockIndex]
-      if (av == null && bv == null) {
-        return (
-          b.agg.bestScore - a.agg.bestScore ||
-          conceptLabel(a.row).localeCompare(conceptLabel(b.row))
-        )
-      }
+      if (sortByChildren) return b.directChildCount - a.directChildCount || tiebreak(a, b)
+      const av = blockScore(a.agg, sortBlockIndex, colorMetric)
+      const bv = blockScore(b.agg, sortBlockIndex, colorMetric)
+      if (av == null && bv == null) return tiebreak(a, b)
       if (av == null) return 1
       if (bv == null) return -1
-      return bv - av || b.agg.bestScore - a.agg.bestScore
+      return bv - av || tiebreak(a, b)
     })
-  }, [columns, sortBlockIndex, sortByChildren])
+  }, [colorMetric, columns, sortBlockIndex, sortByChildren])
 
   const gridWidth = canvasWidth - LABEL_WIDTH
   const maxColumns = Math.max(1, Math.floor(gridWidth / OVERVIEW_MIN_COL_PX))
@@ -304,6 +359,17 @@ function OverviewLevel({
       const textureOrigin = { x: LABEL_WIDTH, y }
 
       for (let i = 0; i < shown.length; i++) {
+        const x = LABEL_WIDTH + i * columnWidth
+        if (colorMetric !== "pValue") {
+          const value = shown[i].agg.color[b]
+          if (value == null) {
+            paintHeatmapCell(context, null, x, y, cellWidth, ROW_HEIGHT - HORIZONTAL_GUTTER)
+          } else {
+            context.fillStyle = divergingColor(value / colorLimit(colorMetric))
+            context.fillRect(x, y, cellWidth, ROW_HEIGHT - HORIZONTAL_GUTTER)
+          }
+          continue
+        }
         const value = shown[i].agg.maxLogp[b]
         const level =
           scaleMode === "global"
@@ -312,7 +378,7 @@ function OverviewLevel({
         paintHeatmapCell(
           context,
           level,
-          LABEL_WIDTH + i * columnWidth,
+          x,
           y,
           cellWidth,
           ROW_HEIGHT - HORIZONTAL_GUTTER,
@@ -483,6 +549,7 @@ function OverviewLevel({
     activeIndex,
     bucketBreakpoints,
     canvasWidth,
+    colorMetric,
     columnWidth,
     effectiveSort.dir,
     hovered,
@@ -584,20 +651,27 @@ function OverviewLevel({
   const hoveredColumn = hovered ? shown[hovered.column] : null
   const hoveredBlock = hovered ? HEATMAP_BLOCKS[hovered.block] : null
   const hoveredValue = hovered && hoveredColumn ? hoveredColumn.agg.maxLogp[hovered.block] : null
+  const hoveredColor = hovered && hoveredColumn ? hoveredColumn.agg.color[hovered.block] : null
 
   return (
     <Paper sx={{ p: 1.5 }} variant="outlined">
       <Stack
         direction="row"
         spacing={1}
-        sx={{ alignItems: "baseline", justifyContent: "space-between", mb: 0.5 }}
+        sx={{
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          mb: 0.5,
+        }}
       >
         <Typography variant="subtitle2">{title}</Typography>
         <Typography variant="caption" color="text.secondary">
           {shown.length.toLocaleString()} of {columns.length.toLocaleString()}
           {hiddenCount > 0 ? ` · ${hiddenCount.toLocaleString()} weaker hidden` : ""}
           {` · sorted by ${
-            effectiveSort.key.type === "children" ? "children" : effectiveSort.key.block
+            effectiveSort.key.type === "children"
+              ? "children"
+              : `${effectiveSort.key.block} ${SORT_METRIC_LABEL[colorMetric]}`
           } ${effectiveSort.dir === "desc" ? "▼" : "▲"}`}
         </Typography>
       </Stack>
@@ -648,6 +722,8 @@ function OverviewLevel({
               ? ` | ${hoveredColumn.directChildCount.toLocaleString()} direct children · ${hoveredColumn.agg.count.toLocaleString()} in subtree — click to open below`
               : " | leaf — click to open in the table"}
             {` | ${hoveredBlock} | max -log10(p) ${hoveredValue == null ? "N/A" : formatNumber(hoveredValue, 2)}`}
+            {colorMetric !== "pValue" &&
+              ` | ${COLOR_METRIC_LABEL[colorMetric]} ${hoveredColor == null ? "N/A" : formatNumber(hoveredColor, 2)}`}
           </>
         ) : (
           "Hover a column to inspect the concept and subtree evidence."
@@ -687,12 +763,42 @@ function ColorRangeSlider({
         marks={[
           { value: 0, label: "0" },
           // A mark under each handle so its threshold value is always visible (not just on hover).
-          ...value.map((breakpoint) => ({ value: breakpoint, label: breakpoint.toFixed(1) })),
+          ...value.map((breakpoint) => ({
+            value: breakpoint,
+            label: breakpoint.toFixed(1),
+          })),
           { value: max, label: formatNumber(max, 0) },
         ]}
       />
       <Typography variant="caption">-Log(p) buckets (drag to set thresholds)</Typography>
       <Button size="small" startIcon={<Restore />} onClick={resetBreakpoints} />
+    </Box>
+  )
+}
+
+// Key for the SMD color modes: the diverging ramp from -limit to +limit.
+function DivergingLegend({ metric }: { metric: OverviewColorMetric }) {
+  const limit = colorLimit(metric)
+  const stops = Array.from({ length: 11 }, (_, index) => divergingColor(index / 5 - 1))
+  return (
+    <Box sx={{ px: 1, pt: 1 }}>
+      <Box
+        sx={{
+          height: 12,
+          borderRadius: 0.5,
+          background: `linear-gradient(to right, ${stops.join(", ")})`,
+        }}
+      />
+      <Stack direction="row" sx={{ justifyContent: "space-between" }}>
+        <Typography variant="caption">≤ −{limit}</Typography>
+        <Typography variant="caption">0</Typography>
+        <Typography variant="caption">≥ {limit}</Typography>
+      </Stack>
+      <Typography variant="caption" color="text.secondary">
+        {metric === "smdRowScaled"
+          ? `SMD z-scored per analysis row: (SMD − row mean) / row SD, saturating at ±${limit}`
+          : `SMD capped at ±${limit}`}
+      </Typography>
     </Box>
   )
 }
@@ -733,13 +839,21 @@ function InfoModal() {
             component="div"
             sx={{ display: "flex", flexDirection: "column", gap: 1 }}
           >
-            Each column is a concept; its texture shows the strongest -log10(p) evidence across that
-            concept and all of its descendants — the denser the pattern, the stronger the evidence.
-            The bar under each column header shows what a click does — and, for parents, how many
-            direct children it has:
+            Each column is a concept. With <b>Color by: p-value</b> its texture shows the strongest
+            -log10(p) evidence across that concept and all of its descendants — the denser the
+            pattern, the stronger the evidence. With the <b>SMD</b> options the cell shows the
+            standardized mean difference furthest from zero in that subtree (blue = lower in cases,
+            red = higher), either capped at ±{OVERVIEW_SMD_CAP} or z-scored within each analysis
+            row. The bar under each column header shows what a click does — and, for parents, how
+            many direct children it has:
             <Box
               component="span"
-              sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, mx: 0.75 }}
+              sx={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 0.5,
+                mx: 0.75,
+              }}
             >
               <Box
                 component="span"
@@ -756,7 +870,12 @@ function InfoModal() {
             </Box>
             <Box
               component="span"
-              sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, mx: 0.75 }}
+              sx={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 0.5,
+                mx: 0.75,
+              }}
             >
               <Box
                 component="span"
@@ -794,6 +913,7 @@ export function DuckDbOverview({
   onSelectConcept: (rowKey: string) => void
   sharedControls: ReactNode
 }) {
+  const [colorMetric, setColorMetric] = useState<OverviewColorMetric>("smdCapped")
   const [scaleMode, setScaleMode] = useState<HeatmapScaleMode>("perColumn")
   const [searchText, setSearchText] = useState("")
   // Drill path of parent rowKeys. Empty = only the roots panel. Each entry adds a child panel below.
@@ -802,7 +922,7 @@ export function DuckDbOverview({
   // so HEATMAP_LEVEL_COUNT - 1 thumbs.
   const [breakpoints, setBreakpoints] = useState<number[]>([])
 
-  const { perColumnMax, globalMax, derivedByKey } = useMemo(
+  const { perColumnMax, globalMax, derivedByKey, smdRowStats } = useMemo(
     () => computeHeatmapDerived(rows),
     [rows],
   )
@@ -835,6 +955,15 @@ export function DuckDbOverview({
       const maxLogp: (number | null)[] = derived
         ? [...derived.logp]
         : new Array<number | null>(blockCount).fill(null)
+      // Row scaling uses the stats of the whole loaded population (not the search subset or one
+      // panel), so a concept keeps its color while you search or drill.
+      const color: (number | null)[] = HEATMAP_BLOCKS.map((_, b) => {
+        const smd = derived?.smd[b] ?? null
+        if (smd == null || colorMetric === "pValue") return null
+        if (colorMetric === "smdCapped") return smd
+        const { mean, sd } = smdRowStats[b]
+        return sd > 0 ? (smd - mean) / sd : 0
+      })
       let count = 1
       if (!visiting.has(rowKey)) {
         visiting.add(rowKey)
@@ -847,19 +976,24 @@ export function DuckDbOverview({
             if (value != null && (maxLogp[b] == null || value > (maxLogp[b] as number))) {
               maxLogp[b] = value
             }
+            const childColor = childAgg.color[b]
+            const own = color[b]
+            if (childColor != null && (own == null || Math.abs(childColor) > Math.abs(own))) {
+              color[b] = childColor
+            }
           }
         }
         visiting.delete(rowKey)
       }
       let bestScore = 0
       for (const value of maxLogp) if (value != null && value > bestScore) bestScore = value
-      const result: SubtreeAgg = { maxLogp, bestScore, count }
+      const result: SubtreeAgg = { maxLogp, color, bestScore, count }
       agg.set(rowKey, result)
       return result
     }
     for (const rowKey of rowByKey.keys()) compute(rowKey)
     return agg
-  }, [derivedByKey, hierarchy, rowByKey])
+  }, [colorMetric, derivedByKey, hierarchy, rowByKey, smdRowStats])
 
   // Reset the drill path when the population changes (new data or search). Done during render —
   // React's recommended alternative to a setState-in-effect.
@@ -909,7 +1043,10 @@ export function DuckDbOverview({
     for (let d = 0; d < path.length; d++) {
       const childKeys = hierarchy.childRowKeysByParentRowKey.get(path[d]) ?? []
       if (childKeys.length === 0) break
-      result.push({ parentRow: rowByKey.get(path[d]) ?? null, columns: makeColumns(childKeys) })
+      result.push({
+        parentRow: rowByKey.get(path[d]) ?? null,
+        columns: makeColumns(childKeys),
+      })
     }
     return result
   }, [hierarchy, path, population, rowByKey, subtreeAggByKey])
@@ -933,18 +1070,35 @@ export function DuckDbOverview({
         {sharedControls}
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <FormControl fullWidth size={"small"}>
-            <InputLabel id="duckdb-overview-scale-label">Color Scale</InputLabel>
+            <InputLabel id="duckdb-overview-color-label">Color by</InputLabel>
             <Select
-              labelId="duckdb-overview-scale-label"
-              value={scaleMode}
-              label="Color Scale"
-              onChange={(event) => setScaleMode(event.target.value as HeatmapScaleMode)}
+              labelId="duckdb-overview-color-label"
+              value={colorMetric}
+              label="Color by"
+              onChange={(event) => setColorMetric(event.target.value as OverviewColorMetric)}
             >
-              <MenuItem value="perColumn">Per analysis</MenuItem>
-              <MenuItem value="global">Global</MenuItem>
+              <MenuItem value="smdCapped">SMD (capped ±{OVERVIEW_SMD_CAP})</MenuItem>
+              <MenuItem value="smdRowScaled">SMD (row-scaled)</MenuItem>
+              <MenuItem value="pValue">p-value (-log10)</MenuItem>
             </Select>
           </FormControl>
         </Grid>
+        {colorMetric === "pValue" && (
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <FormControl fullWidth size={"small"}>
+              <InputLabel id="duckdb-overview-scale-label">Color Scale</InputLabel>
+              <Select
+                labelId="duckdb-overview-scale-label"
+                value={scaleMode}
+                label="Color Scale"
+                onChange={(event) => setScaleMode(event.target.value as HeatmapScaleMode)}
+              >
+                <MenuItem value="perColumn">Per analysis</MenuItem>
+                <MenuItem value="global">Global</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+        )}
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <TextField
             fullWidth
@@ -961,7 +1115,9 @@ export function DuckDbOverview({
           />
         </Grid>
         <Grid columns={2} size={{ xs: 12, sm: 6 }}>
-          {scaleMode === "global" ? (
+          {colorMetric !== "pValue" ? (
+            <DivergingLegend metric={colorMetric} />
+          ) : scaleMode === "global" ? (
             <ColorRangeSlider
               value={breakpoints}
               onChange={setBreakpoints}
@@ -1028,6 +1184,7 @@ export function DuckDbOverview({
             }
             columns={level.columns}
             activeRowKey={path[depth] ?? null}
+            colorMetric={colorMetric}
             scaleMode={scaleMode}
             perColumnMax={perColumnMax}
             bucketBreakpoints={breakpoints}
