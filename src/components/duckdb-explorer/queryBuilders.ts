@@ -433,7 +433,7 @@ export function buildFullSummaryQuery(
 }
 
 // Lean projection for the heatmap/scatter views: only the identity columns plus the
-// per-block p-value and effect size each cell needs. ~15 columns instead of ConceptSummaryRow's
+// per-block p-value, effect size and SMD each cell needs. ~15 columns instead of ConceptSummaryRow's
 // ~80, so tens of thousands of rows stay cheap to transfer, map, and hold in memory. Field names
 // match ConceptSummaryRow so getChartMetricValue and the scatter chart work unchanged.
 export function buildHeatmapQuery(
@@ -459,16 +459,22 @@ export function buildHeatmapQuery(
       bestPValue,
       binaryPValue,
       binaryEffectSize,
+      binarySmd,
       countsPValue,
       countsEffectSize,
+      countsSmd,
       agePValue,
       ageEffectSize,
+      ageSmd,
       daysPValue,
       daysEffectSize,
+      daysSmd,
       continuousPValue,
       continuousEffectSize,
+      continuousSmd,
       categoricalPValue,
-      categoricalEffectSize
+      categoricalEffectSize,
+      categoricalSmd
     FROM final_rows
     ${whereClause}
     ORDER BY bestPValue ASC NULLS LAST, conceptName ASC
