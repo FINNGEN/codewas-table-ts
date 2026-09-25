@@ -60,8 +60,8 @@ import { Info, Restore, Search } from "@mui/icons-material"
 import { useTheme } from "@mui/material/styles"
 
 // Canvas geometry (CSS pixels). The overview is transposed: analyses are the (few, fixed) rows and
-// concepts are the (many) columns. Columns follow the parent→children hierarchy (buildHierarchyIndex):
-// the top level is the tree roots; clicking a parent opens its direct children in a panel below — the
+// concepts are the (many) columns. Columns follow the parentâ†’children hierarchy (buildHierarchyIndex):
+// the top level is the tree roots; clicking a parent opens its direct children in a panel below â€” the
 // stack of panels keeps the whole drill path on screen so you always know where you are.
 const LABEL_WIDTH = 160 // left gutter for analysis row labels
 // Top strip, split into two sub-bands: labels on top (~6-22px) and the affordance/child-count band
@@ -87,7 +87,7 @@ const HORIZONTAL_GUTTER = 0
 
 // Per-node rollup: MAX -log10(p) per block over the node's whole subtree (itself + all descendants),
 // plus the subtree concept count and its strongest block (for sorting and the tooltip). `color` is
-// the value the SD-effect color modes paint: per block, the subtree value furthest from zero, sign kept —
+// the value the SD-effect color modes paint: per block, the subtree value furthest from zero, sign kept â€”
 // the raw SD-standardized effect in capped mode (clamped only when painted, so the caption shows the true value) or
 // the row z-score in row-scaled mode. All-null in p-value mode, which paints from `maxLogp`.
 type SubtreeAgg = {
@@ -153,13 +153,13 @@ function prepareCanvas(canvas: HTMLCanvasElement, cssWidth: number, cssHeight: n
 function truncateToWidth(context: CanvasRenderingContext2D, text: string, maxWidth: number) {
   if (context.measureText(text).width <= maxWidth) return text
   let truncated = text
-  while (truncated.length > 1 && context.measureText(`${truncated}…`).width > maxWidth) {
+  while (truncated.length > 1 && context.measureText(`${truncated}â€¦`).width > maxWidth) {
     truncated = truncated.slice(0, -1)
   }
-  return `${truncated}…`
+  return `${truncated}â€¦`
 }
 
-// Saturation point of the diverging ramp per SD-effect mode: values at or beyond ±limit get the full hue.
+// Saturation point of the diverging ramp per SD-effect mode: values at or beyond Â±limit get the full hue.
 function colorLimit(metric: OverviewColorMetric) {
   return metric === "smdRowScaled" ? OVERVIEW_ROW_Z_LIMIT : OVERVIEW_SMD_CAP
 }
@@ -226,8 +226,8 @@ function OverviewLevel({
 
   // The canvas paints with plain strings, so every color has to be resolved from the theme by
   // hand. It must be the theme from *context* (useTheme), not the `appTheme` object: `appTheme
-  // .palette` is the default color scheme frozen at createTheme() time, so reading it — at module
-  // scope or inside a callback — always yields the light palette no matter what the toggle says.
+  // .palette` is the default color scheme frozen at createTheme() time, so reading it â€” at module
+  // scope or inside a callback â€” always yields the light palette no matter what the toggle says.
   // ThemeProvider swaps what context holds; it does not mutate the object you imported.
   const theme = useTheme()
   const canvasColors = useMemo(() => {
@@ -243,7 +243,7 @@ function OverviewLevel({
       sortActive: theme.palette.primary.main,
       sortInactive: theme.palette.text.disabled,
       labelBg: theme.palette.background.paper,
-      // 12px canvas text over `paper` — the `main` step is too light to read against it, so labels
+      // 12px canvas text over `paper` â€” the `main` step is too light to read against it, so labels
       // take the darker (light mode) / lighter (dark mode) end of the ramp.
       labelParent: isLight ? theme.palette.primary.dark : theme.palette.primary.light,
       labelLeaf: theme.palette.text.primary,
@@ -318,7 +318,7 @@ function OverviewLevel({
   const columnWidth = shown.length > 0 ? gridWidth / shown.length : gridWidth
   const activeIndex = activeRowKey ? shown.findIndex((c) => c.row.rowKey === activeRowKey) : -1
 
-  // Busiest parent in this level — the reference the sqrt-scaled child-count bars normalize against.
+  // Busiest parent in this level â€” the reference the sqrt-scaled child-count bars normalize against.
   // Over `columns` (not `shown`) so the scale is stable regardless of the width cap.
   const maxChildCount = useMemo(
     () => Math.max(1, ...columns.map((column) => column.directChildCount)),
@@ -401,7 +401,7 @@ function OverviewLevel({
       context.fillStyle = isSortBlock ? canvasColors.sortActive : canvasColors.sortInactive
       context.textAlign = "center"
       context.fillText(
-        isSortBlock ? (effectiveSort.dir === "desc" ? "▼" : "▲") : "⇅",
+        isSortBlock ? (effectiveSort.dir === "desc" ? "â–¼" : "â–²") : "â‡…",
         LABEL_WIDTH - SORT_ICON_RIGHT_PAD - SORT_ICON_W / 2,
         y + ROW_HEIGHT / 2,
       )
@@ -413,7 +413,7 @@ function OverviewLevel({
     context.fillRect(0, 0, LABEL_WIDTH - HORIZONTAL_GUTTER, HEADER_WIDTH)
     context.fillStyle = canvasColors.gutterText
     context.textAlign = "left"
-    context.fillText("Concept →", 10, HEADER_WIDTH / 2)
+    context.fillText("Concept â†’", 10, HEADER_WIDTH / 2)
 
     // Child-count sort toggle, stacked in the sort-icon column above the per-analysis sort arrows.
     context.fillStyle = sortByChildren ? canvasColors.sortActive : canvasColors.sortInactive
@@ -421,7 +421,7 @@ function OverviewLevel({
     context.fillText("children", LABEL_WIDTH - SORT_ICON_RIGHT_PAD - SORT_ICON_W, HEADER_WIDTH / 2)
     context.textAlign = "center"
     context.fillText(
-      sortByChildren ? (effectiveSort.dir === "desc" ? "▼" : "▲") : "⇅",
+      sortByChildren ? (effectiveSort.dir === "desc" ? "â–¼" : "â–²") : "â‡…",
       LABEL_WIDTH - SORT_ICON_RIGHT_PAD - SORT_ICON_W / 2,
       HEADER_WIDTH / 2,
     )
@@ -459,7 +459,7 @@ function OverviewLevel({
     ) => {
       const column = shown[index]
       if (!column) return
-      const suffix = column.hasChildren ? " ▸" : ""
+      const suffix = column.hasChildren ? " â–¸" : ""
       const text = truncateToWidth(context, conceptLabel(column.row) + suffix, maxWidth)
       const textWidth = context.measureText(text).width
       const centerX = LABEL_WIDTH + index * columnWidth + columnWidth / 2
@@ -492,7 +492,7 @@ function OverviewLevel({
     }
 
     // When columns are wide enough, label every one (kept inside its own column so they don't collide).
-    // A leaf's label is a hit target for the concept dialog — the same thing its column does — so its
+    // A leaf's label is a hit target for the concept dialog â€” the same thing its column does â€” so its
     // box is recorded; a parent's label is not (its column drills into the panel below instead).
     if (showAllLabels) {
       for (let i = 0; i < shown.length; i++) {
@@ -667,12 +667,12 @@ function OverviewLevel({
         <Typography variant="subtitle2">{title}</Typography>
         <Typography variant="caption" color="text.secondary">
           {shown.length.toLocaleString()} of {columns.length.toLocaleString()}
-          {hiddenCount > 0 ? ` · ${hiddenCount.toLocaleString()} weaker hidden` : ""}
-          {` · sorted by ${
+          {hiddenCount > 0 ? ` Â· ${hiddenCount.toLocaleString()} weaker hidden` : ""}
+          {` Â· sorted by ${
             effectiveSort.key.type === "children"
               ? "children"
               : `${effectiveSort.key.block} ${SORT_METRIC_LABEL[colorMetric]}`
-          } ${effectiveSort.dir === "desc" ? "▼" : "▲"}`}
+          } ${effectiveSort.dir === "desc" ? "â–¼" : "â–²"}`}
         </Typography>
       </Stack>
       <Box ref={containerRef} sx={{ width: "100%", overflow: "hidden" }}>
@@ -719,8 +719,8 @@ function OverviewLevel({
             <strong>{conceptLabel(hoveredColumn.row)}</strong>
             {/* {hoveredColumn.row.conceptCode ? ` | ${hoveredColumn.row.conceptCode}` : ""} */}
             {hoveredColumn.directChildCount > 0
-              ? ` | ${hoveredColumn.directChildCount.toLocaleString()} direct children · ${hoveredColumn.agg.count.toLocaleString()} in subtree — click to open below`
-              : " | leaf — click to open in the table"}
+              ? ` | ${hoveredColumn.directChildCount.toLocaleString()} direct children Â· ${hoveredColumn.agg.count.toLocaleString()} in subtree â€” click to open below`
+              : " | leaf â€” click to open in the table"}
             {` | ${hoveredBlock} | max -log10(p) ${hoveredValue == null ? "N/A" : formatNumber(hoveredValue, 2)}`}
             {colorMetric !== "pValue" &&
               ` | ${COLOR_METRIC_LABEL[colorMetric]} ${hoveredColor == null ? "N/A" : formatNumber(hoveredColor, 2)}`}
@@ -790,14 +790,14 @@ function DivergingLegend({ metric }: { metric: OverviewColorMetric }) {
         }}
       />
       <Stack direction="row" sx={{ justifyContent: "space-between" }}>
-        <Typography variant="caption">≤ −{limit}</Typography>
+        <Typography variant="caption">â‰¤ âˆ’{limit}</Typography>
         <Typography variant="caption">0</Typography>
-        <Typography variant="caption">≥ {limit}</Typography>
+        <Typography variant="caption">â‰¥ {limit}</Typography>
       </Stack>
       <Typography variant="caption" color="text.secondary">
         {metric === "smdRowScaled"
           ? `SD-standardized effect z-scored per analysis row: (SD effect - row mean) / row SD, saturating at +/-${limit}`
-          : `SD-standardized effect capped at ±${limit}`}
+          : `SD-standardized effect capped at Â±${limit}`}
       </Typography>
     </Box>
   )
@@ -840,11 +840,11 @@ function InfoModal() {
             sx={{ display: "flex", flexDirection: "column", gap: 1 }}
           >
             Each column is a concept. With <b>Color by: p-value</b> its texture shows the strongest
-            -log10(p) evidence across that concept and all of its descendants — the denser the
+            -log10(p) evidence across that concept and all of its descendants â€” the denser the
             pattern, the stronger the evidence. With the <b>SD effect</b> options the cell shows the
             SD-standardized effect furthest from zero in that subtree (blue = lower in cases,
-            red = higher), either capped at ±{OVERVIEW_SMD_CAP} or z-scored within each analysis
-            row. The bar under each column header shows what a click does — and, for parents, how
+            red = higher), either capped at Â±{OVERVIEW_SMD_CAP} or z-scored within each analysis
+            row. The bar under each column header shows what a click does â€” and, for parents, how
             many direct children it has:
             <Box
               component="span"
@@ -865,7 +865,7 @@ function InfoModal() {
                   display: "inline-block",
                 }}
               />
-              parent → opens its children in a panel below. Bar height = number of direct children
+              parent â†’ opens its children in a panel below. Bar height = number of direct children
               (scaled to the busiest parent in that level).
             </Box>
             <Box
@@ -887,7 +887,7 @@ function InfoModal() {
                   display: "inline-block",
                 }}
               />
-              leaf → opens the concept dialog.
+              leaf â†’ opens the concept dialog.
             </Box>
             <Box>The currently expanded column is outlined in amber.</Box>
             <Box>
@@ -939,7 +939,7 @@ export function DuckDbOverview({
     [population],
   )
 
-  // Same parent→children logic the table uses (rootRowKeys + childRowKeysByParentRowKey).
+  // Same parentâ†’children logic the table uses (rootRowKeys + childRowKeysByParentRowKey).
   const hierarchy = useMemo(() => buildHierarchyIndex(population), [population])
 
   // Subtree rollups: MAX -log10(p) per block across each node's whole subtree. Post-order over the
@@ -995,7 +995,7 @@ export function DuckDbOverview({
     return agg
   }, [colorMetric, derivedByKey, hierarchy, rowByKey, smdRowStats])
 
-  // Reset the drill path when the population changes (new data or search). Done during render —
+  // Reset the drill path when the population changes (new data or search). Done during render â€”
   // React's recommended alternative to a setState-in-effect.
   const [prevPopulation, setPrevPopulation] = useState(population)
   if (prevPopulation !== population) {
@@ -1051,7 +1051,7 @@ export function DuckDbOverview({
     return result
   }, [hierarchy, path, population, rowByKey, subtreeAggByKey])
 
-  // Click a parent → open its children in the panel below (or collapse if already open). Leaf → table.
+  // Click a parent â†’ open its children in the panel below (or collapse if already open). Leaf â†’ table.
   const handlePick = (depth: number, column: Column) => {
     if (column.hasChildren) {
       setPath((current) =>
@@ -1077,7 +1077,7 @@ export function DuckDbOverview({
               label="Color by"
               onChange={(event) => setColorMetric(event.target.value as OverviewColorMetric)}
             >
-              <MenuItem value="smdCapped">SD effect (capped ±{OVERVIEW_SMD_CAP})</MenuItem>
+              <MenuItem value="smdCapped">SD effect (capped Â±{OVERVIEW_SMD_CAP})</MenuItem>
               <MenuItem value="smdRowScaled">SD effect (row-scaled)</MenuItem>
               <MenuItem value="pValue">p-value (-log10)</MenuItem>
             </Select>
@@ -1126,7 +1126,7 @@ export function DuckDbOverview({
               resetBreakpoints={resetBreakpoints}
             />
           ) : (
-            // Per-analysis mode has no thresholds to drag — just the texture key.
+            // Per-analysis mode has no thresholds to drag â€” just the texture key.
             <Box sx={{ px: 1, pt: 1 }}>
               <PatternLegend />
             </Box>

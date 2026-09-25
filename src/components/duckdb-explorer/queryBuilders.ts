@@ -176,14 +176,14 @@ export function buildSortExpression(sorting: MRT_SortingState) {
 
 // AI verdicts collapsed to the grain of `base` (conceptId + countMode). `aiPrioritization` has one
 // row per statistical test, so several analyses can score the same concept; the verdict is taken
-// from the best-ranked candidate row and `rationale` is read from that *same* row — hence arg_min on
+// from the best-ranked candidate row and `rationale` is read from that *same* row â€” hence arg_min on
 // one shared ordering key rather than independent MAX()es, which could pair a category with another
 // row's reasoning. countMode stays in the key because the source table carries it: a concept scored
 // only in "descendant" mode gets no verdict on its "code" row, rather than borrowing one.
 //
 // Rows the AI never saw are marked aiSent = false and carry the literal category 'NA'. Dropping
 // them here means the LEFT JOIN below leaves aiCategory NULL, which is the same state as a concept
-// with no aiPrioritization row at all — so "not reviewed" has exactly one representation.
+// with no aiPrioritization row at all â€” so "not reviewed" has exactly one representation.
 function buildAiStatsCte() {
   const rank = "coalesce(candidateRank, 2147483647)"
   return `
@@ -203,7 +203,7 @@ function buildAiStatsCte() {
 }
 
 // The AI category is a view selector (like Count Mode and Domain), not an MRT column filter, so it
-// is applied inside `final_rows` — every builder below reads from that CTE and inherits it, and the
+// is applied inside `final_rows` â€” every builder below reads from that CTE and inherits it, and the
 // unfiltered "total" count keeps it too.
 function buildAiCategoryCondition(ai: AiFilter) {
   if (!ai.enabled || ai.category === AI_CATEGORY_ALL) return null

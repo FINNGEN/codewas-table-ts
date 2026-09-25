@@ -12,7 +12,7 @@ import {
 import type { ChartBlockKey, ChartMetricKey, ConceptSummaryRow } from "../types"
 import { negLog10 } from "./utils"
 
-// Perceptual white→main-color ramp (d3 Lab interpolation). `t` is clamped to [0, 1]. Cells are encoded
+// Perceptual whiteâ†’main-color ramp (d3 Lab interpolation). `t` is clamped to [0, 1]. Cells are encoded
 // with texture rather than color (see utils/heatmapPatterns); this ramp backs the color fallback and
 // the level swatches derived from it.
 const rampInterpolator = interpolateLab(OVERVIEW_RAMP_FROM, OVERVIEW_RAMP_TO)
@@ -20,8 +20,8 @@ export function rampColor(t: number) {
   return rampInterpolator(Math.max(0, Math.min(1, t)))
 }
 
-// Diverging ramp for signed values (SD-effect modes). `t` in [-1, 1]: -1 → negative hue, 0 → neutral,
-// 1 → positive hue; clamped outside that range.
+// Diverging ramp for signed values (SD-effect modes). `t` in [-1, 1]: -1 â†’ negative hue, 0 â†’ neutral,
+// 1 â†’ positive hue; clamped outside that range.
 const divergingNegative = interpolateLab(OVERVIEW_DIVERGING_MID, OVERVIEW_DIVERGING_NEGATIVE)
 const divergingPositive = interpolateLab(OVERVIEW_DIVERGING_MID, OVERVIEW_DIVERGING_POSITIVE)
 export function divergingColor(t: number) {
@@ -79,12 +79,12 @@ export type HeatmapDerived = {
   vector: number[]
 }
 
-// Mean and sample SD of one analysis block's SD-standardized effect across all rows — the parameters of the overview's
+// Mean and sample SD of one analysis block's SD-standardized effect across all rows â€” the parameters of the overview's
 // row scaling, z = (SD effect - mean) / sd. `sd` is 0 when fewer than two values exist or all are equal.
 export type SmdRowStats = { mean: number; sd: number }
 
 // Single pass over all rows computing per-row derived metrics plus the per-column and global
-// maxima — using plain loops (never `Math.max(...arr)`, which overflows the call stack at tens of
+// maxima â€” using plain loops (never `Math.max(...arr)`, which overflows the call stack at tens of
 // thousands of args). Maxima seed at 1 so an empty/all-null input never yields -Infinity or 0.
 export function computeHeatmapDerived(rows: ConceptSummaryRow[]): {
   perColumnMax: Record<ChartBlockKey, number>
@@ -167,7 +167,7 @@ function vectorDistance(left: number[], right: number[]) {
 }
 
 // Greedy nearest-neighbor ordering, but bounded: only the top `maxClusterRows` by evidence are
-// clustered (the O(n²) part); the remainder is appended in descending strength. Reuses precomputed
+// clustered (the O(nÂ²) part); the remainder is appended in descending strength. Reuses precomputed
 // vectors so each distance is a cheap array read, not a metric recompute.
 export function clusterHeatmapRows(
   rows: ConceptSummaryRow[],

@@ -129,7 +129,7 @@ export type AiFilter = {
 }
 
 // One row of the `cohortsInfo` table. Unlike `analysisRef`, this table is keyed by cohort (not by
-// analysis) and carries no domainId/analysisType — it describes the case/control cohorts themselves.
+// analysis) and carries no domainId/analysisType â€” it describes the case/control cohorts themselves.
 // The `sql` and `json` columns (full cohort definitions) are deliberately not selected: they are
 // large and unused by the explorer.
 export type CohortInfoRow = {
@@ -141,7 +141,7 @@ export type CohortInfoRow = {
   subsetDefinitionId: number | null
   cohortEntries: number | null
   cohortSubjects: number | null
-  // "use" in SQL — "cases" or "controls" in the shipped exports.
+  // "use" in SQL â€” "cases" or "controls" in the shipped exports.
   cohortUse: string | null
 }
 
@@ -157,7 +157,7 @@ export type TableMode = "flat" | "hierarchy"
 export type HeatmapOrderMode = "strongest" | "selectedBlock" | "repeatEvidence" | "clustered"
 export type HeatmapScaleMode = "global" | "perColumn"
 // What drives the overview's cell color: -log10(p) (the original encoding), SD-standardized effect clamped to
-// ±OVERVIEW_SMD_CAP, or SD-standardized effect z-scored within each analysis row.
+// Â±OVERVIEW_SMD_CAP, or SD-standardized effect z-scored within each analysis row.
 export type OverviewColorMetric = "pValue" | "smdCapped" | "smdRowScaled"
 
 export type HeatmapCell = {
