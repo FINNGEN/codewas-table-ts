@@ -87,8 +87,8 @@ const HORIZONTAL_GUTTER = 0
 
 // Per-node rollup: MAX -log10(p) per block over the node's whole subtree (itself + all descendants),
 // plus the subtree concept count and its strongest block (for sorting and the tooltip). `color` is
-// the value the SMD color modes paint: per block, the subtree value furthest from zero, sign kept —
-// the raw SMD in capped mode (clamped only when painted, so the caption shows the true value) or
+// the value the SD-effect color modes paint: per block, the subtree value furthest from zero, sign kept —
+// the raw SD-standardized effect in capped mode (clamped only when painted, so the caption shows the true value) or
 // the row z-score in row-scaled mode. All-null in p-value mode, which paints from `maxLogp`.
 type SubtreeAgg = {
   maxLogp: (number | null)[]
@@ -114,7 +114,7 @@ type LabelRect = { left: number; top: number; width: number; height: number }
 type SortKey = { type: "block"; block: ChartBlockKey } | { type: "children" }
 
 // A column's rank value for one block under the active color metric: subtree -log10(p) in p-value
-// mode, |SMD| (or |z|) in the SMD modes. Magnitude, not the signed value, so the width cap keeps
+// mode, |SD effect| (or |z|) in the SD-effect modes. Magnitude, not the signed value, so the width cap keeps
 // strong effects in both directions instead of dropping every strongly negative one.
 function blockScore(agg: SubtreeAgg, block: number, metric: OverviewColorMetric) {
   if (metric === "pValue") return agg.maxLogp[block]
@@ -159,20 +159,20 @@ function truncateToWidth(context: CanvasRenderingContext2D, text: string, maxWid
   return `${truncated}…`
 }
 
-// Saturation point of the diverging ramp per SMD mode: values at or beyond ±limit get the full hue.
+// Saturation point of the diverging ramp per SD-effect mode: values at or beyond ±limit get the full hue.
 function colorLimit(metric: OverviewColorMetric) {
   return metric === "smdRowScaled" ? OVERVIEW_ROW_Z_LIMIT : OVERVIEW_SMD_CAP
 }
 
 const COLOR_METRIC_LABEL: Record<OverviewColorMetric, string> = {
   pValue: "max -log10(p)",
-  smdCapped: "SMD",
-  smdRowScaled: "row-scaled SMD (z)",
+  smdCapped: "SD effect",
+  smdRowScaled: "row-scaled SD effect",
 }
 
 const SORT_METRIC_LABEL: Record<OverviewColorMetric, string> = {
   pValue: "-log10(p)",
-  smdCapped: "|SMD|",
+  smdCapped: "|SD effect|",
   smdRowScaled: "|z|",
 }
 
@@ -264,7 +264,7 @@ function OverviewLevel({
     return () => observer.disconnect()
   }, [])
 
-  // Relevance default: the analysis with the highest summed score (-log10(p) or |SMD|, following the
+  // Relevance default: the analysis with the highest summed score (-log10(p) or |SD effect|, following the
   // color metric) across this panel's columns.
   const relevanceBlock = useMemo(() => {
     let bestBlock = HEATMAP_BLOCKS[0]
@@ -776,7 +776,7 @@ function ColorRangeSlider({
   )
 }
 
-// Key for the SMD color modes: the diverging ramp from -limit to +limit.
+// Key for the SD-effect color modes: the diverging ramp from -limit to +limit.
 function DivergingLegend({ metric }: { metric: OverviewColorMetric }) {
   const limit = colorLimit(metric)
   const stops = Array.from({ length: 11 }, (_, index) => divergingColor(index / 5 - 1))
@@ -796,8 +796,8 @@ function DivergingLegend({ metric }: { metric: OverviewColorMetric }) {
       </Stack>
       <Typography variant="caption" color="text.secondary">
         {metric === "smdRowScaled"
-          ? `SMD z-scored per analysis row: (SMD − row mean) / row SD, saturating at ±${limit}`
-          : `SMD capped at ±${limit}`}
+          ? `SD-standardized effect z-scored per analysis row: (SD effect - row mean) / row SD, saturating at +/-${limit}`
+          : `SD-standardized effect capped at ±${limit}`}
       </Typography>
     </Box>
   )
@@ -841,8 +841,8 @@ function InfoModal() {
           >
             Each column is a concept. With <b>Color by: p-value</b> its texture shows the strongest
             -log10(p) evidence across that concept and all of its descendants — the denser the
-            pattern, the stronger the evidence. With the <b>SMD</b> options the cell shows the
-            standardized mean difference furthest from zero in that subtree (blue = lower in cases,
+            pattern, the stronger the evidence. With the <b>SD effect</b> options the cell shows the
+            SD-standardized effect furthest from zero in that subtree (blue = lower in cases,
             red = higher), either capped at ±{OVERVIEW_SMD_CAP} or z-scored within each analysis
             row. The bar under each column header shows what a click does — and, for parents, how
             many direct children it has:
@@ -1077,8 +1077,8 @@ export function DuckDbOverview({
               label="Color by"
               onChange={(event) => setColorMetric(event.target.value as OverviewColorMetric)}
             >
-              <MenuItem value="smdCapped">SMD (capped ±{OVERVIEW_SMD_CAP})</MenuItem>
-              <MenuItem value="smdRowScaled">SMD (row-scaled)</MenuItem>
+              <MenuItem value="smdCapped">SD effect (capped ±{OVERVIEW_SMD_CAP})</MenuItem>
+              <MenuItem value="smdRowScaled">SD effect (row-scaled)</MenuItem>
               <MenuItem value="pValue">p-value (-log10)</MenuItem>
             </Select>
           </FormControl>
