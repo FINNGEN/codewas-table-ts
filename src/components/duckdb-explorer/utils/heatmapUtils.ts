@@ -20,7 +20,7 @@ export function rampColor(t: number) {
   return rampInterpolator(Math.max(0, Math.min(1, t)))
 }
 
-// Diverging ramp for signed values (SMD modes). `t` in [-1, 1]: -1 → negative hue, 0 → neutral,
+// Diverging ramp for signed values (SD-effect modes). `t` in [-1, 1]: -1 → negative hue, 0 → neutral,
 // 1 → positive hue; clamped outside that range.
 const divergingNegative = interpolateLab(OVERVIEW_DIVERGING_MID, OVERVIEW_DIVERGING_NEGATIVE)
 const divergingPositive = interpolateLab(OVERVIEW_DIVERGING_MID, OVERVIEW_DIVERGING_POSITIVE)
@@ -71,7 +71,7 @@ export function getRepeatEvidenceCount(row: ConceptSummaryRow, threshold: number
 // Per-row metrics derived once from the heatmap rows so sorting, clustering, and drawing don't
 // recompute them. `logp` is the per-block -log10(p) (indexed by HEATMAP_BLOCKS, null when absent),
 // `bestScore` the strongest block, `vector` the per-column-normalized profile used for clustering,
-// `smd` the per-block standardized mean difference (same indexing as `logp`).
+// `smd` the per-block SD-standardized effect (same indexing as `logp`).
 export type HeatmapDerived = {
   logp: (number | null)[]
   smd: (number | null)[]
@@ -79,8 +79,8 @@ export type HeatmapDerived = {
   vector: number[]
 }
 
-// Mean and sample SD of one analysis block's SMD across all rows — the parameters of the overview's
-// row scaling, z = (smd - mean) / sd. `sd` is 0 when fewer than two values exist or all are equal.
+// Mean and sample SD of one analysis block's SD-standardized effect across all rows — the parameters of the overview's
+// row scaling, z = (SD effect - mean) / sd. `sd` is 0 when fewer than two values exist or all are equal.
 export type SmdRowStats = { mean: number; sd: number }
 
 // Single pass over all rows computing per-row derived metrics plus the per-column and global

@@ -156,8 +156,8 @@ export type ChartScope = "filtered" | "all"
 export type TableMode = "flat" | "hierarchy"
 export type HeatmapOrderMode = "strongest" | "selectedBlock" | "repeatEvidence" | "clustered"
 export type HeatmapScaleMode = "global" | "perColumn"
-// What drives the overview's cell color: -log10(p) (the original encoding), SMD clamped to
-// ±OVERVIEW_SMD_CAP, or SMD z-scored within each analysis row.
+// What drives the overview's cell color: -log10(p) (the original encoding), SD-standardized effect clamped to
+// ±OVERVIEW_SMD_CAP, or SD-standardized effect z-scored within each analysis row.
 export type OverviewColorMetric = "pValue" | "smdCapped" | "smdRowScaled"
 
 export type HeatmapCell = {

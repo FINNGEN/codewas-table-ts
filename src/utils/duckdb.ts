@@ -60,6 +60,43 @@ async function queryScalarNumber(connection: any, sql: string) {
   return Number((rows[0] as Record<string, unknown> | undefined)?.value ?? 0)
 }
 
+
+async function queryColumnNames(connection: any, tableName: string): Promise<Set<string>> {
+  const safeTableName = tableName.replace(/'/g, "''")
+  const rows = await queryRows(
+    connection,
+    `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'main'
+        AND table_name = '${safeTableName}'
+    `,
+  )
+  return new Set(rows.map((row) => String(row.column_name)))
+}
+
+async function normalizeStatisticalTestsColumns(connection: any) {
+  const columns = await queryColumnNames(connection, "statisticalTests")
+
+  // New CodeWAS exports contain explicit SD- and SE-standardized effect columns.
+  // Older DuckDB result files only contain the legacy misspelled
+  // `standarizeMeanDifference` column. Add the explicit columns in-memory so the
+  // rest of the viewer can query a stable schema while keeping old files readable.
+  if (!columns.has("sdStandardizedEffect")) {
+    await connection.query(`ALTER TABLE statisticalTests ADD COLUMN sdStandardizedEffect DOUBLE`)
+    await connection.query(
+      `UPDATE statisticalTests SET sdStandardizedEffect = standarizeMeanDifference`,
+    )
+  }
+
+  if (!columns.has("seStandardizedEffect")) {
+    await connection.query(`ALTER TABLE statisticalTests ADD COLUMN seStandardizedEffect DOUBLE`)
+    await connection.query(
+      `UPDATE statisticalTests SET seStandardizedEffect = standarizeMeanDifference`,
+    )
+  }
+}
+
 async function buildTableCounts(connection: any): Promise<DuckDbTableCount[]> {
   const tableRows = await queryRows(
     connection,
@@ -142,6 +179,7 @@ export async function loadDuckDbDataSource(sourceLabel: string, bytes: Uint8Arra
   await (db as any).open({ path: fileName })
 
   const connection = await db.connect()
+  await normalizeStatisticalTestsColumns(connection)
   const tableCounts = await buildTableCounts(connection)
   const previewSections = await buildPreviewSections(connection)
   const columnCount = await queryScalarNumber(

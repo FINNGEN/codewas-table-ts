@@ -252,7 +252,7 @@ function buildContinuousBlockQueryFromBase(
       MIN(st.pValue) AS ${prefix}PValue,
       ${negLog10Sql("MIN(st.pValue)")} AS ${prefix}LogP,
       MAX(st.effectSize) AS ${prefix}EffectSize,
-      MAX(st.standarizeMeanDifference) AS ${prefix}Smd,
+      MAX(st.sdStandardizedEffect) AS ${prefix}Smd,
       MAX(st.testName) AS ${prefix}TestName,
       MAX(case_cov.unit) AS ${prefix}Unit
     FROM base AS b
@@ -326,7 +326,7 @@ function buildSummaryQueryCtes(
         MAX(control_totals.cohortSubjects) AS binaryTotalControls,
         MIN(st.pValue) AS binaryPValue,
         MAX(st.effectSize) AS binaryEffectSize,
-        MAX(st.standarizeMeanDifference) AS binarySmd,
+        MAX(st.sdStandardizedEffect) AS binarySmd,
         MAX(st.testName) AS binaryTestName
       FROM base AS b
       JOIN statisticalTests AS st ON st.conceptId = b.conceptId AND st.countMode = b.countMode
@@ -355,7 +355,7 @@ function buildSummaryQueryCtes(
         SUM(coalesce(control_cov.sumValue, 0)) AS categoricalControlYes,
         MIN(st.pValue) AS categoricalPValue,
         MAX(st.effectSize) AS categoricalEffectSize,
-        MAX(st.standarizeMeanDifference) AS categoricalSmd,
+        MAX(st.sdStandardizedEffect) AS categoricalSmd,
         MAX(st.testName) AS categoricalTestName,
         string_agg(
           coalesce(cat_ref.conceptName, 'Unknown') || '::' ||
@@ -507,7 +507,7 @@ export function buildFullSummaryQuery(
 }
 
 // Lean projection for the heatmap/scatter views: only the identity columns plus the
-// per-block p-value, effect size and SMD each cell needs. ~15 columns instead of ConceptSummaryRow's
+// per-block p-value, effect size and SD-standardized effect each cell needs. ~15 columns instead of ConceptSummaryRow's
 // ~80, so tens of thousands of rows stay cheap to transfer, map, and hold in memory. Field names
 // match ConceptSummaryRow so getChartMetricValue and the scatter chart work unchanged.
 export function buildHeatmapQuery(

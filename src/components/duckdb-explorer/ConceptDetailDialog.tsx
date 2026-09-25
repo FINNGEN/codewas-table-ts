@@ -38,7 +38,7 @@ function renderTestSummary(
         Effect: {effectSize == null ? "N/A" : formatNumber(effectSize, 2)}
       </Typography>
       <Typography variant="body2" color="text.secondary">
-        SMD: {smd == null ? "N/A" : formatNumber(smd, 2)}
+        SD effect: {smd == null ? "N/A" : formatNumber(smd, 2)}
       </Typography>
       <Typography variant="body2" color="text.secondary">
         Test: {testName ?? "N/A"}
@@ -53,17 +53,17 @@ type AnalysisSectionKey = "binary" | "categorical" | "counts" | "age" | "days" |
 // statistical calculations in CodeWAS.
 const ANALYSIS_DESCRIPTIONS: Record<AnalysisSectionKey, string> = {
   binary:
-    "Compares the proportion with at least one record (Fisher's exact or chi-square test). Effect is the odds ratio (cases / controls): values above 1 mean the concept is more common in cases; values below 1 mean it is less common. SMD is the standardized prevalence difference: (case prevalence - control prevalence) / pooled prevalence SD.",
+    "Compares the proportion with at least one record (Fisher's exact or chi-square test). Effect is the odds ratio (cases / controls): values above 1 mean the concept is more common in cases; values below 1 mean it is less common. SD effect is the standardized prevalence difference: (case prevalence - control prevalence) / pooled prevalence SD.",
   categorical:
-    "Compares the distribution across categories (Fisher's exact or chi-square test). Effect and SMD are Cramer's V, a 0-1 measure of how different category proportions are between cases and controls. 0 means the cohorts have the same category distribution; values closer to 1 mean the distributions are more different. Use the distribution bars to see which categories differ.",
+    "Compares the distribution across categories (Fisher's exact or chi-square test). Effect and SD effect are Cramer's V, a 0-1 measure of how different category proportions are between cases and controls. 0 means the cohorts have the same category distribution; values closer to 1 mean the distributions are more different. Use the distribution bars to see which categories differ.",
   counts:
-    "Compares the average number of records per person (negative-binomial test). Effect is the incidence rate ratio (IRR; case mean / control mean): values above 1 mean more records in cases; values below 1 mean fewer. The displayed SMD is a standardized log rate-ratio statistic: log(IRR) / SE[log(IRR)], not the usual mean-difference SMD.",
+    "Compares the average number of records per person (negative-binomial test). Effect is the incidence rate ratio (IRR; case mean / control mean): values above 1 mean more records in cases; values below 1 mean fewer. SD effect is the count mean difference divided by the pooled person-level count SD.",
   age:
-    "Compares age at first record among people with a record (Welch two-sample t-test). Effect is case mean minus control mean, in years: positive means a later age in cases and negative means an earlier age. SMD is (case mean - control mean) / pooled SD. Only people with a recorded event contribute to this comparison.",
+    "Compares age at first record among people with a record (Welch two-sample t-test). Effect is case mean minus control mean, in years: positive means a later age in cases and negative means an earlier age. SD effect is (case mean - control mean) / pooled SD. Only people with a recorded event contribute to this comparison.",
   days:
-    "Compares days from cohort entry to first record among people with a record (Welch two-sample t-test). Effect is case mean minus control mean, in days: positive means later in cases and negative means earlier. SMD is (case mean - control mean) / pooled SD. Only people with a recorded event contribute to this comparison.",
+    "Compares days from cohort entry to first record among people with a record (Welch two-sample t-test). Effect is case mean minus control mean, in days: positive means later in cases and negative means earlier. SD effect is (case mean - control mean) / pooled SD. Only people with a recorded event contribute to this comparison.",
   continuous:
-    "Compares recorded numeric values among people with a value (Welch two-sample t-test). Effect is case mean minus control mean in the displayed unit: positive means higher values in cases and negative means lower. SMD is (case mean - control mean) / pooled SD.",
+    "Compares recorded numeric values among people with a value (Welch two-sample t-test). Effect is case mean minus control mean in the displayed unit: positive means higher values in cases and negative means lower. SD effect is (case mean - control mean) / pooled SD.",
 }
 
 // Every analysis card shares the same shell: a title, the results on the left, and the description
