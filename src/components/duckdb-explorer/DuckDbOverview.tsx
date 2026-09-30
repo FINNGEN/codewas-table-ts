@@ -1175,8 +1175,29 @@ export function DuckDbOverview({
 
   return (
     <Stack spacing={2}>
-      <Grid container spacing={2} sx={{ p: 1, pt: 2, placeContent: "space-between" }}>
-        {sharedControls}
+      <Grid container spacing={2} sx={{ p: 1, pt: 2 }}>
+        <Grid size={12}>
+          <Grid container spacing={2}>
+            {sharedControls}
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <TextField
+                fullWidth
+                size="small"
+                label={
+                  <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
+                    <Search sx={{ fontSize: 16 }} />
+                    Concept search
+                  </Box>
+                }
+                value={searchText}
+                onChange={(event) => setSearchText(event.target.value)}
+                placeholder="Filter the concept population by concept/code/id"
+              />
+            </Grid>
+          </Grid>
+        </Grid>
+        <Grid size={12}>
+          <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <FormControl fullWidth size={"small"}>
             <InputLabel id="duckdb-overview-color-label">Color by</InputLabel>
@@ -1240,22 +1261,9 @@ export function DuckDbOverview({
             </FormControl>
           </Grid>
         )}
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <TextField
-            fullWidth
-            size={"small"}
-            label={
-              <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
-                <Search sx={{ fontSize: 16 }} />
-                Concept search
-              </Box>
-            }
-            value={searchText}
-            onChange={(event) => setSearchText(event.target.value)}
-            placeholder="Filter the concept population by concept/code/id"
-          />
+          </Grid>
         </Grid>
-        <Grid columns={2} size={{ xs: 12, sm: 6 }}>
+        <Grid size={12}>
           {colorMetric !== "pValue" ? (
             <DivergingLegend
               metric={colorMetric}
@@ -1279,7 +1287,9 @@ export function DuckDbOverview({
             </Box>
           )}
         </Grid>
-        <InfoModal />
+        <Grid size={12}>
+          <InfoModal />
+        </Grid>
       </Grid>
 
       <Stack spacing={1.5} sx={{ px: 1 }}>

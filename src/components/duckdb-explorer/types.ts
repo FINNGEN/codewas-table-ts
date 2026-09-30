@@ -150,7 +150,7 @@ export type CohortInfoIndex = Record<number, CohortInfoRow>
 
 export type BlockMetricRow = Record<string, unknown>
 export type ChartBlockKey = "Binary" | "Count" | "Age" | "Days" | "Continuous" | "Categorical"
-export type ChartMetricKey = "-log10" | "effectSize"
+export type ChartMetricKey = "-log10" | "effectSize" | "standardizedEffect"
 export type ChartMode = "heatmap" | "scatter"
 export type ChartScope = "filtered" | "all"
 export type TableMode = "flat" | "hierarchy"
