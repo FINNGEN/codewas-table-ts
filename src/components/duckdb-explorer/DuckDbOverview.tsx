@@ -18,7 +18,6 @@ import {
   InputLabel,
   Link,
   MenuItem,
-  Modal,
   Paper,
   Select,
   Stack,
@@ -45,6 +44,7 @@ import {
   paintHeatmapCell,
 } from "./utils/heatmapPatterns"
 import PatternLegend from "./UI/PatternLegend"
+import { ChartAboutDialog } from "./ChartAboutDialog"
 import { buildHierarchyIndex } from "./utils/hierarchyUtils"
 import type {
   ChartBlockKey,
@@ -54,7 +54,7 @@ import type {
 } from "./types"
 import { formatNumber } from "./utils/utils"
 import MultiTrackColorSlider from "./UI/MultiTrackColorSlider"
-import { Info, Restore, Search } from "@mui/icons-material"
+import { Restore, Search } from "@mui/icons-material"
 import { useTheme } from "@mui/material/styles"
 
 // Canvas geometry (CSS pixels). The overview is transposed: analyses are the (few, fixed) rows and
@@ -878,105 +878,46 @@ function DivergingLegend({
   )
 }
 
-function InfoModal() {
-  const [open, setOpen] = useState(false)
-  const handleOpen = () => setOpen(true)
-  const handleClose = () => setOpen(false)
-
-  const style = {
-    position: "absolute",
-    top: "50%",
-    left: "50%",
-    transform: "translate(-50%, -50%)",
-    width: 400,
-    bgcolor: "background.paper",
-    boxShadow: 24,
-    p: 4,
-    borderRadius: 2,
-  }
-
+function InfoModal({ colorMetric }: { colorMetric: OverviewColorMetric }) {
   return (
-    <Box>
-      <Button onClick={handleOpen} startIcon={<Info />} variant="outlined" size="small">
-        About
-      </Button>
-
-      <Modal
-        open={open}
-        onClose={handleClose}
-        aria-labelledby="modal-modal-title"
-        aria-describedby="modal-modal-description"
-      >
-        <Box sx={style}>
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            component="div"
-            sx={{ display: "flex", flexDirection: "column", gap: 1 }}
-          >
-            Each column is a concept. The <b>Parent cell</b> control compares the concept's own
-            CodeWAS result with the strongest result among loaded rows in its visible subtree.
-            The hover caption names the row supplying a subtree maximum. In p-value mode, denser
-            texture means stronger -log10(p) evidence. In ordinary standardized-effect mode, blue
-            means a negative effect and red a positive one; categorical effects are unsigned. In
-            row-scaled mode, colors instead mean below or above that analysis row's mean, not
-            case-control direction. The effect-scale selector compares uncapped colors with
-            percentile caps without changing any result values. The bar under each column header
-            shows what a click does - and, for parents, how
-            many direct children it has:
-            <Box
-              component="span"
-              sx={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 0.5,
-                mx: 0.75,
-              }}
-            >
-              <Box
-                component="span"
-                sx={{
-                  width: 14,
-                  height: 14,
-                  bgcolor: "primary.main",
-                  borderRadius: 0.5,
-                  display: "inline-block",
-                }}
-              />
-              parent opens its children in a panel below. Bar height = number of direct children
-              (scaled to the busiest parent in that level).
-            </Box>
-            <Box
-              component="span"
-              sx={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 0.5,
-                mx: 0.75,
-              }}
-            >
-              <Box
-                component="span"
-                sx={{
-                  width: 14,
-                  height: 6,
-                  bgcolor: "text.disabled",
-                  borderRadius: 0.5,
-                  display: "inline-block",
-                }}
-              />
-              leaf opens the concept dialog.
-            </Box>
-            <Box>The currently expanded column is outlined in amber.</Box>
-            <Box>
-              When the scale is set to <b>Global</b> you can use the slider to adjust the thresholds
-              at which each texture level kicks in.
-            </Box>
-            <PatternLegend />
+    <ChartAboutDialog>
+      <Typography variant="body2">
+        Each column is a concept; each row is an analysis type. <b>Chart scope</b> chooses whether
+        to show filtered or all loaded concepts.
+      </Typography>
+      <Typography variant="body2">
+        <b>Parent cell</b> controls what a parent column displays. <b>Concept's own result</b> uses
+        that concept's CodeWAS result; <b>Strongest in subtree</b> uses the strongest result among
+        loaded rows in its subtree. Hover to compare the two and see which concept supplied the
+        subtree result. Opening a concept's detail shows its own result.
+      </Typography>
+      <Typography variant="body2">
+        <b>Color by</b> selects -log10(p), standardized effect, or row-scaled standardized effect.
+        For standardized effect, blue is negative and red is positive; categorical effects are
+        unsigned. Row-scaled colors mean below or above that analysis row's mean, not case-control
+        direction.
+      </Typography>
+      <Typography variant="body2">
+        <b>Effect scale</b> changes colors, not results. Uncapped shows the full observed range; the
+        95th-, 98th-, and 99th-percentile choices limit the color range symmetrically around zero.
+        The legend shows the chosen limit and how many source values exceed it. The default is the
+        99th percentile.
+      </Typography>
+      <Typography variant="body2">
+        A tall blue bar under a parent shows its number of direct children and opens them below; a
+        short grey bar marks a leaf that opens the concept detail. The expanded column has an amber
+        outline.
+      </Typography>
+      {colorMetric === "pValue" && (
+        <>
+          <Typography variant="body2">
+            In p-value mode, denser texture means stronger evidence. The <b>Global</b> scale's slider
+            adjusts texture thresholds.
           </Typography>
-        </Box>
-      </Modal>
-    </Box>
+          <PatternLegend />
+        </>
+      )}
+    </ChartAboutDialog>
   )
 }
 
@@ -1194,6 +1135,9 @@ export function DuckDbOverview({
                 placeholder="Filter the concept population by concept/code/id"
               />
             </Grid>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex", justifyContent: "flex-end" }}>
+              <InfoModal colorMetric={colorMetric} />
+            </Grid>
           </Grid>
         </Grid>
         <Grid size={12}>
@@ -1286,9 +1230,6 @@ export function DuckDbOverview({
               <PatternLegend />
             </Box>
           )}
-        </Grid>
-        <Grid size={12}>
-          <InfoModal />
         </Grid>
       </Grid>
 
