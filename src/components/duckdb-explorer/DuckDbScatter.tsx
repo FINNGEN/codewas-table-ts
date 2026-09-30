@@ -48,6 +48,8 @@ export function DuckDbScatter({
   const [xBlock, setXBlock] = useState<ChartBlockKey>("Binary")
   const [yBlock, setYBlock] = useState<ChartBlockKey>("Count")
   const [metric, setMetric] = useState<ChartMetricKey>("-log10")
+  const metricLabel =
+    metric === "-log10" ? "-log10(p)" : metric === "effectSize" ? "effect size" : "standardized effect"
 
   const [showRegression, setShowRegression] = useState(true)
   const toggleRegression = () => setShowRegression((prev) => !prev)
@@ -153,8 +155,8 @@ export function DuckDbScatter({
             </Select>
           </FormControl>
         </Grid>
-        <Grid size={12}>
-        <FormControl size="small">
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+        <FormControl size="small" fullWidth>
           <FormControlLabel
             control={<Switch checked={showRegression} size="small" onChange={toggleRegression} />}
             label={
@@ -192,12 +194,12 @@ export function DuckDbScatter({
             ]}
             xAxis={[
               {
-                label: `${COLUMNS.find((column) => column.key === xBlock)?.label ?? xBlock} ${metric}`,
+                label: `${COLUMNS.find((column) => column.key === xBlock)?.label ?? xBlock} ${metricLabel}`,
               },
             ]}
             yAxis={[
               {
-                label: `${COLUMNS.find((column) => column.key === yBlock)?.label ?? yBlock} ${metric}`,
+                label: `${COLUMNS.find((column) => column.key === yBlock)?.label ?? yBlock} ${metricLabel}`,
               },
             ]}
             height={460}

@@ -1263,7 +1263,7 @@ export function DuckDbOverview({
         )}
           </Grid>
         </Grid>
-        <Grid size={12}>
+        <Grid size={{ xs: 12, md: 6 }}>
           {colorMetric !== "pValue" ? (
             <DivergingLegend
               metric={colorMetric}
