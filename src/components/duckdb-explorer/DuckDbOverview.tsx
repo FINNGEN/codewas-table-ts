@@ -150,10 +150,15 @@ function selectedColor(agg: SubtreeAgg, mode: ParentCellMode) {
   return mode === "own" ? agg.ownColor : agg.color
 }
 
-// A column's rank follows the same parent-cell meaning used for painting.
-function blockScore(agg: SubtreeAgg, block: number, metric: OverviewColorMetric, mode: ParentCellMode) {
+// Read the value painted for this analysis, keeping the direction of an effect.
+function blockValue(agg: SubtreeAgg, block: number, metric: OverviewColorMetric, mode: ParentCellMode) {
   if (metric === "pValue") return selectedLogp(agg, mode)[block]
-  const value = selectedColor(agg, mode)[block]
+  return selectedColor(agg, mode)[block]
+}
+
+// Magnitude still chooses which columns survive the width cap and which row is relevant by default.
+function blockScore(agg: SubtreeAgg, block: number, metric: OverviewColorMetric, mode: ParentCellMode) {
+  const value = blockValue(agg, block, metric, mode)
   return value == null ? null : Math.abs(value)
 }
 
@@ -327,9 +332,9 @@ function OverviewLevel({
     effectiveSort.key.type === "block" ? HEATMAP_BLOCKS.indexOf(effectiveSort.key.block) : -1
   const sortByChildren = effectiveSort.key.type === "children"
 
-  // Rank by the active dimension (desc, nulls last) so the width cap keeps the strongest columns;
-  // ascending just reverses the kept set for display. Tiebreak by the column's strongest block under
-  // the same metric, then name.
+  // First keep the strongest columns by magnitude, so large negative effects are not lost to the
+  // width cap. Display order is separate: signed effects run positive-to-negative (or vice versa),
+  // while -log10(p) retains ordinary numeric sorting. Nulls stay last in either direction.
   const ranked = useMemo(() => {
     const overall = new Map(columns.map((c) => [c, overallScore(c.agg, colorMetric, parentCellMode)] as const))
     const tiebreak = (a: Column, b: Column) =>
@@ -349,7 +354,19 @@ function OverviewLevel({
   const gridWidth = canvasWidth - LABEL_WIDTH
   const maxColumns = Math.max(1, Math.floor(gridWidth / OVERVIEW_MIN_COL_PX))
   const kept = ranked.length > maxColumns ? ranked.slice(0, maxColumns) : ranked
-  const shown = effectiveSort.dir === "asc" ? [...kept].reverse() : kept
+  const shown = sortByChildren
+    ? effectiveSort.dir === "asc" ? [...kept].reverse() : kept
+    : [...kept].sort((a, b) => {
+        const av = blockValue(a.agg, sortBlockIndex, colorMetric, parentCellMode)
+        const bv = blockValue(b.agg, sortBlockIndex, colorMetric, parentCellMode)
+        if (av == null && bv == null) return conceptLabel(a.row).localeCompare(conceptLabel(b.row))
+        if (av == null) return 1
+        if (bv == null) return -1
+        const byValue = effectiveSort.dir === "desc" ? bv - av : av - bv
+        return byValue || overallScore(b.agg, colorMetric, parentCellMode) -
+          overallScore(a.agg, colorMetric, parentCellMode) ||
+          conceptLabel(a.row).localeCompare(conceptLabel(b.row))
+      })
   const hiddenCount = columns.length - kept.length
   const columnWidth = shown.length > 0 ? gridWidth / shown.length : gridWidth
   const activeIndex = activeRowKey ? shown.findIndex((c) => c.row.rowKey === activeRowKey) : -1
@@ -902,6 +919,11 @@ function InfoModal({ colorMetric }: { colorMetric: OverviewColorMetric }) {
         95th-, 98th-, and 99th-percentile choices limit the color range symmetrically around zero.
         The legend shows the chosen limit and how many source values exceed it. The default is the
         99th percentile.
+      </Typography>
+      <Typography variant="body2">
+        Sorting an analysis row orders effect colors by their signed value, positive to negative or
+        the reverse. If there are more columns than fit, the viewer first keeps the largest absolute
+        effects in either direction. P-value sorting uses -log10(p).
       </Typography>
       <Typography variant="body2">
         A tall blue bar under a parent shows its number of direct children and opens them below; a
