@@ -61,7 +61,12 @@ export function DuckDbCharts({
   )
 
   return chartMode === "scatter" ? (
-    <DuckDbScatter rows={rows} chartLoading={chartLoading} sharedControls={sharedControls} />
+    <DuckDbScatter
+      rows={rows}
+      chartLoading={chartLoading}
+      onSelectConcept={onSelectConcept}
+      sharedControls={sharedControls}
+    />
   ) : (
     <DuckDbOverview
       rows={rows}

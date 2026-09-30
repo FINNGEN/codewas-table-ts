@@ -31,7 +31,6 @@ import { CHART_BLOCK_FIELD_PREFIX, SCATTER_POINT_CAP } from "./constants"
 import { getChartMetricValue } from "./utils/heatmapUtils"
 import { negLog10 } from "./utils/utils"
 import type { ChartBlockKey, ChartMetricKey, ConceptSummaryRow } from "./types"
-import { useClipboard } from "./context/ClipboardContext"
 import { ChartAboutDialog } from "./ChartAboutDialog"
 
 type ScatterPoint = { id: string; label: string; x: number | null; y: number | null }
@@ -47,7 +46,7 @@ function ScatterInfoModal() {
       </Typography>
       <Typography variant="body2">
         Standardized effects help compare analyses, but they remain analysis-specific measures.
-        Hover for the concept and its results; click a point to copy its concept name.
+        Hover for the concept and its results; click a point to open its detailed concept view.
       </Typography>
       <Typography variant="body2">
         The <b>Regression line</b> is a descriptive straight-line fit to the displayed points. Its
@@ -61,13 +60,14 @@ function ScatterInfoModal() {
 export function DuckDbScatter({
   rows,
   chartLoading,
+  onSelectConcept,
   sharedControls,
 }: {
   rows: ConceptSummaryRow[]
   chartLoading: boolean
+  onSelectConcept: (rowKey: string) => void
   sharedControls: ReactNode
 }) {
-  const { copy } = useClipboard()
   const [xBlock, setXBlock] = useState<ChartBlockKey>("Binary")
   const [yBlock, setYBlock] = useState<ChartBlockKey>("Count")
   const [metric, setMetric] = useState<ChartMetricKey>("-log10")
@@ -232,7 +232,8 @@ export function DuckDbScatter({
             hitAreaRadius="item"
             slots={{ tooltip: ConceptTooltip }}
             onItemClick={(_: unknown, d: ScatterItemIdentifier) => {
-              copy(dataset[d.dataIndex].label, "Copied Concept Name")
+              const point = dataset[d.dataIndex]
+              if (point) onSelectConcept(point.id)
             }}
           >
             {showRegression && (
