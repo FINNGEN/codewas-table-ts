@@ -89,9 +89,12 @@ const HORIZONTAL_GUTTER = 0
 // the raw SD-standardized effect in the unscaled mode or
 // the row z-score in row-scaled mode. All-null in p-value mode, which paints from `maxLogp`.
 type SubtreeAgg = {
+  ownLogp: (number | null)[]
+  ownColor: (number | null)[]
   maxLogp: (number | null)[]
+  maxLogpSource: (string | null)[]
   color: (number | null)[]
-  bestScore: number
+  colorSource: (string | null)[]
   count: number
 }
 
@@ -110,28 +113,64 @@ type LabelRect = { left: number; top: number; width: number; height: number }
 // What a panel is sorted by: one of the analysis blocks (by the active color metric) or the
 // direct-child count.
 type SortKey = { type: "block"; block: ChartBlockKey } | { type: "children" }
+type ParentCellMode = "own" | "subtree"
+type EffectCapMode = "full" | "p95" | "p98" | "p99"
 
-// A column's rank value for one block under the active color metric: subtree -log10(p) in p-value
-// mode, |SD effect| (or |z|) in the SD-effect modes. Magnitude, not the signed value, so the width cap keeps
-// strong effects in both directions instead of dropping every strongly negative one.
-function blockScore(agg: SubtreeAgg, block: number, metric: OverviewColorMetric) {
-  if (metric === "pValue") return agg.maxLogp[block]
-  const value = agg.color[block]
+type EffectScaleStats = {
+  values: number[]
+  full: number
+  p95: number
+  p98: number
+  p99: number
+}
+
+function effectScaleStats(values: number[]): EffectScaleStats {
+  const sorted = values.filter((value) => Number.isFinite(value) && value > 0).sort((a, b) => a - b)
+  const percentile = (p: number) => {
+    if (sorted.length === 0) return 1
+    const position = (sorted.length - 1) * p
+    const lower = Math.floor(position)
+    const upper = Math.ceil(position)
+    return sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower)
+  }
+  return {
+    values: sorted,
+    full: sorted.at(-1) ?? 1,
+    p95: percentile(0.95),
+    p98: percentile(0.98),
+    p99: percentile(0.99),
+  }
+}
+
+function selectedLogp(agg: SubtreeAgg, mode: ParentCellMode) {
+  return mode === "own" ? agg.ownLogp : agg.maxLogp
+}
+
+function selectedColor(agg: SubtreeAgg, mode: ParentCellMode) {
+  return mode === "own" ? agg.ownColor : agg.color
+}
+
+// A column's rank follows the same parent-cell meaning used for painting.
+function blockScore(agg: SubtreeAgg, block: number, metric: OverviewColorMetric, mode: ParentCellMode) {
+  if (metric === "pValue") return selectedLogp(agg, mode)[block]
+  const value = selectedColor(agg, mode)[block]
   return value == null ? null : Math.abs(value)
 }
 
 // Strongest block of a column under the active metric: the tiebreak when the sorted block is equal.
-function overallScore(agg: SubtreeAgg, metric: OverviewColorMetric) {
-  if (metric === "pValue") return agg.bestScore
+function overallScore(agg: SubtreeAgg, metric: OverviewColorMetric, mode: ParentCellMode) {
   let best = 0
-  for (let b = 0; b < agg.color.length; b++) best = Math.max(best, blockScore(agg, b, metric) ?? 0)
+  for (let b = 0; b < agg.color.length; b++) best = Math.max(best, blockScore(agg, b, metric, mode) ?? 0)
   return best
 }
 
 const EMPTY_AGG: SubtreeAgg = {
+  ownLogp: new Array<number | null>(HEATMAP_BLOCKS.length).fill(null),
+  ownColor: new Array<number | null>(HEATMAP_BLOCKS.length).fill(null),
   maxLogp: new Array<number | null>(HEATMAP_BLOCKS.length).fill(null),
+  maxLogpSource: new Array<string | null>(HEATMAP_BLOCKS.length).fill(null),
   color: new Array<number | null>(HEATMAP_BLOCKS.length).fill(null),
-  bestScore: 0,
+  colorSource: new Array<string | null>(HEATMAP_BLOCKS.length).fill(null),
   count: 1,
 }
 
@@ -183,6 +222,7 @@ function OverviewLevel({
   activeRowKey,
   colorMetric,
   colorRange,
+  parentCellMode,
   scaleMode,
   perColumnMax,
   bucketBreakpoints,
@@ -194,6 +234,7 @@ function OverviewLevel({
   activeRowKey: string | null
   colorMetric: OverviewColorMetric
   colorRange: number
+  parentCellMode: ParentCellMode
   scaleMode: HeatmapScaleMode
   perColumnMax: Record<ChartBlockKey, number>
   bucketBreakpoints: number[]
@@ -267,7 +308,7 @@ function OverviewLevel({
     for (let b = 0; b < HEATMAP_BLOCKS.length; b++) {
       let sum = 0
       for (const column of columns) {
-        const value = blockScore(column.agg, b, colorMetric)
+        const value = blockScore(column.agg, b, colorMetric, parentCellMode)
         if (value != null) sum += value
       }
       if (sum > bestSum) {
@@ -276,7 +317,7 @@ function OverviewLevel({
       }
     }
     return bestBlock
-  }, [colorMetric, columns])
+  }, [colorMetric, columns, parentCellMode])
 
   const effectiveSort: { key: SortKey; dir: "asc" | "desc" } = sort ?? {
     key: { type: "block", block: relevanceBlock },
@@ -290,20 +331,20 @@ function OverviewLevel({
   // ascending just reverses the kept set for display. Tiebreak by the column's strongest block under
   // the same metric, then name.
   const ranked = useMemo(() => {
-    const overall = new Map(columns.map((c) => [c, overallScore(c.agg, colorMetric)] as const))
+    const overall = new Map(columns.map((c) => [c, overallScore(c.agg, colorMetric, parentCellMode)] as const))
     const tiebreak = (a: Column, b: Column) =>
       (overall.get(b) ?? 0) - (overall.get(a) ?? 0) ||
       conceptLabel(a.row).localeCompare(conceptLabel(b.row))
     return [...columns].sort((a, b) => {
       if (sortByChildren) return b.directChildCount - a.directChildCount || tiebreak(a, b)
-      const av = blockScore(a.agg, sortBlockIndex, colorMetric)
-      const bv = blockScore(b.agg, sortBlockIndex, colorMetric)
+      const av = blockScore(a.agg, sortBlockIndex, colorMetric, parentCellMode)
+      const bv = blockScore(b.agg, sortBlockIndex, colorMetric, parentCellMode)
       if (av == null && bv == null) return tiebreak(a, b)
       if (av == null) return 1
       if (bv == null) return -1
       return bv - av || tiebreak(a, b)
     })
-  }, [colorMetric, columns, sortBlockIndex, sortByChildren])
+  }, [colorMetric, columns, parentCellMode, sortBlockIndex, sortByChildren])
 
   const gridWidth = canvasWidth - LABEL_WIDTH
   const maxColumns = Math.max(1, Math.floor(gridWidth / OVERVIEW_MIN_COL_PX))
@@ -356,7 +397,7 @@ function OverviewLevel({
       for (let i = 0; i < shown.length; i++) {
         const x = LABEL_WIDTH + i * columnWidth
         if (colorMetric !== "pValue") {
-          const value = shown[i].agg.color[b]
+          const value = selectedColor(shown[i].agg, parentCellMode)[b]
           if (value == null) {
             paintHeatmapCell(context, null, x, y, cellWidth, ROW_HEIGHT - HORIZONTAL_GUTTER)
           } else {
@@ -365,7 +406,7 @@ function OverviewLevel({
           }
           continue
         }
-        const value = shown[i].agg.maxLogp[b]
+        const value = selectedLogp(shown[i].agg, parentCellMode)[b]
         const level =
           scaleMode === "global"
             ? bucketPatternLevel(value, bucketBreakpoints)
@@ -551,6 +592,7 @@ function OverviewLevel({
     hovered,
     hoveredLabel,
     maxChildCount,
+    parentCellMode,
     perColumnMax,
     scaleMode,
     shown,
@@ -646,8 +688,14 @@ function OverviewLevel({
   const hoveredLabelColumn = hoveredLabel >= 0 ? (shown[hoveredLabel] ?? null) : null
   const hoveredColumn = hovered ? shown[hovered.column] : null
   const hoveredBlock = hovered ? HEATMAP_BLOCKS[hovered.block] : null
-  const hoveredValue = hovered && hoveredColumn ? hoveredColumn.agg.maxLogp[hovered.block] : null
-  const hoveredColor = hovered && hoveredColumn ? hoveredColumn.agg.color[hovered.block] : null
+  const hoveredAgg = hoveredColumn?.agg
+  const hoveredOwnLogp = hovered && hoveredAgg ? hoveredAgg.ownLogp[hovered.block] : null
+  const hoveredSubtreeLogp = hovered && hoveredAgg ? hoveredAgg.maxLogp[hovered.block] : null
+  const hoveredLogpSource = hovered && hoveredAgg ? hoveredAgg.maxLogpSource[hovered.block] : null
+  const hoveredOwnColor = hovered && hoveredAgg ? hoveredAgg.ownColor[hovered.block] : null
+  const hoveredSubtreeColor = hovered && hoveredAgg ? hoveredAgg.color[hovered.block] : null
+  const hoveredColorSource = hovered && hoveredAgg ? hoveredAgg.colorSource[hovered.block] : null
+  const shownValue = (value: number | null) => value == null ? "N/A" : formatNumber(value, 2)
 
   return (
     <Paper sx={{ p: 1.5 }} variant="outlined">
@@ -717,9 +765,14 @@ function OverviewLevel({
             {hoveredColumn.directChildCount > 0
               ? ` | ${hoveredColumn.directChildCount.toLocaleString()} direct children  -  ${hoveredColumn.agg.count.toLocaleString()} in subtree - click to open below`
               : " | leaf - click to open in the table"}
-            {` | ${hoveredBlock} | max -log10(p) ${hoveredValue == null ? "N/A" : formatNumber(hoveredValue, 2)}`}
-            {colorMetric !== "pValue" &&
-              ` | ${COLOR_METRIC_LABEL[colorMetric]} ${hoveredColor == null ? "N/A" : formatNumber(hoveredColor, 2)}`}
+            {" | "}{hoveredBlock}{" | -log10(p): own "}{shownValue(hoveredOwnLogp)}
+            {", subtree best "}{shownValue(hoveredSubtreeLogp)}
+            {hoveredLogpSource && <>{" from "}<strong>{hoveredLogpSource}</strong></>}
+            {colorMetric !== "pValue" && <>
+              {" | "}{COLOR_METRIC_LABEL[colorMetric]}{": own "}{shownValue(hoveredOwnColor)}
+              {", subtree strongest "}{shownValue(hoveredSubtreeColor)}
+              {hoveredColorSource && <>{" from "}<strong>{hoveredColorSource}</strong></>}
+            </>}
           </>
         ) : (
           "Hover a column to inspect the concept and subtree evidence."
@@ -772,9 +825,26 @@ function ColorRangeSlider({
   )
 }
 
-// Key for the SD-effect color modes: the same diverging range used by the canvas.
-function DivergingLegend({ metric, colorRange }: { metric: OverviewColorMetric; colorRange: number }) {
-  const label = Number(colorRange.toPrecision(3)).toString()
+function scaleLabel(value: number) {
+  return Number(value.toPrecision(3)).toString()
+}
+
+// Diagnostic key: endpoint colors mean values at or beyond the chosen percentile cap.
+function DivergingLegend({
+  metric,
+  colorRange,
+  capMode,
+  stats,
+  saturatedCount,
+}: {
+  metric: OverviewColorMetric
+  colorRange: number
+  capMode: EffectCapMode
+  stats: EffectScaleStats
+  saturatedCount: number
+}) {
+  const label = scaleLabel(colorRange)
+  const capped = capMode !== "full"
   const stops = Array.from({ length: 11 }, (_, index) => divergingColor(index / 5 - 1))
   return (
     <Box sx={{ px: 1, pt: 1 }}>
@@ -786,14 +856,23 @@ function DivergingLegend({ metric, colorRange }: { metric: OverviewColorMetric; 
         }}
       />
       <Stack direction="row" sx={{ justifyContent: "space-between" }}>
-        <Typography variant="caption">-{label}</Typography>
+        <Typography variant="caption">{capped ? "<= -" : "-"}{label}</Typography>
         <Typography variant="caption">0</Typography>
-        <Typography variant="caption">+{label}</Typography>
+        <Typography variant="caption">{capped ? ">= +" : "+"}{label}</Typography>
       </Stack>
       <Typography variant="caption" color="text.secondary">
         {metric === "smdRowScaled"
-          ? "Standardized effect z-scored per analysis row; full observed range"
-          : "Standardized effect; full observed range, symmetric around zero"}
+          ? "Standardized effect z-scored per analysis row"
+          : "Standardized effect, symmetric around zero"}
+        {capped ? ` | ${capMode.slice(1)}th-percentile cap` : " | uncapped"}
+      </Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+        {"Nonzero source values: "}{stats.values.length.toLocaleString()}
+        {" | p95 "}{scaleLabel(stats.p95)}
+        {" | p98 "}{scaleLabel(stats.p98)}
+        {" | p99 "}{scaleLabel(stats.p99)}
+        {" | source values above cap: "}{saturatedCount.toLocaleString()}
+        {" ("}{stats.values.length > 0 ? formatNumber(100 * saturatedCount / stats.values.length, 1) : "0"}{"%)"}
       </Typography>
     </Box>
   )
@@ -835,13 +914,15 @@ function InfoModal() {
             component="div"
             sx={{ display: "flex", flexDirection: "column", gap: 1 }}
           >
-            Each column is a concept. With <b>Color by: p-value</b> its texture shows the strongest
-            -log10(p) evidence across that concept and all of its descendants - the denser the
-            pattern, the stronger the evidence. With the <b>Standardized effect</b> options the cell
-            shows the standardized effect furthest from zero in that subtree (blue = lower in cases,
-            red = higher; categorical effects are unsigned), either shown on the full data range or
-            z-scored within each analysis row. The bar under each column header shows what a click
-            does - and, for parents, how
+            Each column is a concept. The <b>Parent cell</b> control compares the concept's own
+            CodeWAS result with the strongest result among loaded rows in its visible subtree.
+            The hover caption names the row supplying a subtree maximum. In p-value mode, denser
+            texture means stronger -log10(p) evidence. In ordinary standardized-effect mode, blue
+            means a negative effect and red a positive one; categorical effects are unsigned. In
+            row-scaled mode, colors instead mean below or above that analysis row's mean, not
+            case-control direction. The effect-scale selector compares uncapped colors with
+            percentile caps without changing any result values. The bar under each column header
+            shows what a click does - and, for parents, how
             many direct children it has:
             <Box
               component="span"
@@ -911,6 +992,8 @@ export function DuckDbOverview({
   sharedControls: ReactNode
 }) {
   const [colorMetric, setColorMetric] = useState<OverviewColorMetric>("smdRaw")
+  const [parentCellMode, setParentCellMode] = useState<ParentCellMode>("own")
+  const [effectCapMode, setEffectCapMode] = useState<EffectCapMode>("p99")
   const [scaleMode, setScaleMode] = useState<HeatmapScaleMode>("perColumn")
   const [searchText, setSearchText] = useState("")
   // Drill path of parent rowKeys. Empty = only the roots panel. Each entry adds a child panel below.
@@ -924,23 +1007,28 @@ export function DuckDbOverview({
     [rows],
   )
 
-  // Full, symmetric ranges across every analysis and hierarchy level. Keep colors stable while
-  // searching or drilling; shared data filters change `rows` and recalculate the ranges.
-  const { maxAbsSmd, maxAbsRowZ } = useMemo(() => {
-    let maxAbsSmd = 0
-    let maxAbsRowZ = 0
+  // Diagnostic caps use the actual per-concept values, not subtree maxima (which would count one
+  // outlier once per ancestor). The input is the same loaded/filtered chart population for all panels.
+  const { rawScaleStats, rowScaleStats } = useMemo(() => {
+    const rawValues: number[] = []
+    const rowValues: number[] = []
     for (const derived of derivedByKey.values()) {
       for (let b = 0; b < derived.smd.length; b++) {
         const value = derived.smd[b]
         if (value == null) continue
-        maxAbsSmd = Math.max(maxAbsSmd, Math.abs(value))
+        rawValues.push(Math.abs(value))
         const { mean, sd } = smdRowStats[b]
-        if (sd > 0) maxAbsRowZ = Math.max(maxAbsRowZ, Math.abs((value - mean) / sd))
+        if (sd > 0) rowValues.push(Math.abs((value - mean) / sd))
       }
     }
-    return { maxAbsSmd: maxAbsSmd || 1, maxAbsRowZ: maxAbsRowZ || 1 }
+    return { rawScaleStats: effectScaleStats(rawValues), rowScaleStats: effectScaleStats(rowValues) }
   }, [derivedByKey, smdRowStats])
-  const colorRange = colorMetric === "smdRowScaled" ? maxAbsRowZ : maxAbsSmd
+  const activeScaleStats = colorMetric === "smdRowScaled" ? rowScaleStats : rawScaleStats
+  const colorRange = activeScaleStats[effectCapMode]
+  const saturatedCount = activeScaleStats.values.reduce(
+    (count, value) => count + Number(value > colorRange),
+    0,
+  )
 
   // The concept population for the overview: search-filtered. The hierarchy is rebuilt from this set,
   // so a filtered-out parent re-links its children to the nearest surviving ancestor (same as the table).
@@ -967,18 +1055,24 @@ export function DuckDbOverview({
       const cached = agg.get(rowKey)
       if (cached) return cached
       const derived = derivedByKey.get(rowKey)
-      const maxLogp: (number | null)[] = derived
+      const ownLogp: (number | null)[] = derived
         ? [...derived.logp]
         : new Array<number | null>(blockCount).fill(null)
+      const maxLogp = [...ownLogp]
+      const row = rowByKey.get(rowKey)
+      const sourceLabel = row ? `${conceptLabel(row)} (${row.countMode})` : rowKey
+      const maxLogpSource = ownLogp.map((value) => value == null ? null : sourceLabel)
       // Row scaling uses the stats of the whole loaded population (not the search subset or one
       // panel), so a concept keeps its color while you search or drill.
-      const color: (number | null)[] = HEATMAP_BLOCKS.map((_, b) => {
+      const ownColor: (number | null)[] = HEATMAP_BLOCKS.map((_, b) => {
         const smd = derived?.smd[b] ?? null
         if (smd == null || colorMetric === "pValue") return null
         if (colorMetric === "smdRaw") return smd
         const { mean, sd } = smdRowStats[b]
         return sd > 0 ? (smd - mean) / sd : 0
       })
+      const color = [...ownColor]
+      const colorSource = ownColor.map((value) => value == null ? null : sourceLabel)
       let count = 1
       if (!visiting.has(rowKey)) {
         visiting.add(rowKey)
@@ -990,19 +1084,19 @@ export function DuckDbOverview({
             const value = childAgg.maxLogp[b]
             if (value != null && (maxLogp[b] == null || value > (maxLogp[b] as number))) {
               maxLogp[b] = value
+              maxLogpSource[b] = childAgg.maxLogpSource[b]
             }
             const childColor = childAgg.color[b]
             const own = color[b]
             if (childColor != null && (own == null || Math.abs(childColor) > Math.abs(own))) {
               color[b] = childColor
+              colorSource[b] = childAgg.colorSource[b]
             }
           }
         }
         visiting.delete(rowKey)
       }
-      let bestScore = 0
-      for (const value of maxLogp) if (value != null && value > bestScore) bestScore = value
-      const result: SubtreeAgg = { maxLogp, color, bestScore, count }
+      const result: SubtreeAgg = { ownLogp, ownColor, maxLogp, maxLogpSource, color, colorSource, count }
       agg.set(rowKey, result)
       return result
     }
@@ -1098,6 +1192,38 @@ export function DuckDbOverview({
             </Select>
           </FormControl>
         </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <FormControl fullWidth size="small">
+            <InputLabel id="duckdb-overview-parent-label">Parent cell</InputLabel>
+            <Select
+              labelId="duckdb-overview-parent-label"
+              value={parentCellMode}
+              label="Parent cell"
+              onChange={(event) => setParentCellMode(event.target.value as ParentCellMode)}
+            >
+              <MenuItem value="own">Concept's own result</MenuItem>
+              <MenuItem value="subtree">Strongest in subtree</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+        {colorMetric !== "pValue" && (
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <FormControl fullWidth size="small">
+              <InputLabel id="duckdb-overview-effect-cap-label">Effect scale</InputLabel>
+              <Select
+                labelId="duckdb-overview-effect-cap-label"
+                value={effectCapMode}
+                label="Effect scale"
+                onChange={(event) => setEffectCapMode(event.target.value as EffectCapMode)}
+              >
+                <MenuItem value="full">Uncapped</MenuItem>
+                <MenuItem value="p95">Cap at 95th percentile</MenuItem>
+                <MenuItem value="p98">Cap at 98th percentile</MenuItem>
+                <MenuItem value="p99">Cap at 99th percentile</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+        )}
         {colorMetric === "pValue" && (
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <FormControl fullWidth size={"small"}>
@@ -1131,7 +1257,13 @@ export function DuckDbOverview({
         </Grid>
         <Grid columns={2} size={{ xs: 12, sm: 6 }}>
           {colorMetric !== "pValue" ? (
-            <DivergingLegend metric={colorMetric} colorRange={colorRange} />
+            <DivergingLegend
+              metric={colorMetric}
+              colorRange={colorRange}
+              capMode={effectCapMode}
+              stats={activeScaleStats}
+              saturatedCount={saturatedCount}
+            />
           ) : scaleMode === "global" ? (
             <ColorRangeSlider
               value={breakpoints}
@@ -1201,6 +1333,7 @@ export function DuckDbOverview({
             activeRowKey={path[depth] ?? null}
             colorMetric={colorMetric}
             colorRange={colorRange}
+            parentCellMode={parentCellMode}
             scaleMode={scaleMode}
             perColumnMax={perColumnMax}
             bucketBreakpoints={breakpoints}
