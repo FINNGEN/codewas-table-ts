@@ -43,6 +43,9 @@ export function getChartMetricValue(
   metric: ChartMetricKey,
 ) {
   const prefix = CHART_BLOCK_FIELD_PREFIX[block]
+  if (metric === "standardizedEffect") {
+    return getSmdValue(row, block)
+  }
   if (metric === "effectSize") {
     return row[`${prefix}EffectSize` as keyof ConceptSummaryRow] as number | null
   }

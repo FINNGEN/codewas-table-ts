@@ -97,7 +97,13 @@ export function DuckDbScatter({
   return (
     <Stack spacing={3}>
       <Grid container spacing={2} sx={{ p: 1, pt: 2 }}>
-        {sharedControls}
+        <Grid size={12}>
+          <Grid container spacing={2}>
+            {sharedControls}
+          </Grid>
+        </Grid>
+        <Grid size={12}>
+          <Grid container spacing={2} sx={{ alignItems: "center" }}>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <FormControl fullWidth size={"small"}>
             <InputLabel id="duckdb-chart-x-label">X Axis</InputLabel>
@@ -143,9 +149,11 @@ export function DuckDbScatter({
             >
               <MenuItem value="-log10">-log10(p)</MenuItem>
               <MenuItem value="effectSize">Effect size</MenuItem>
+              <MenuItem value="standardizedEffect">Standardized effect</MenuItem>
             </Select>
           </FormControl>
         </Grid>
+        <Grid size={12}>
         <FormControl size="small">
           <FormControlLabel
             control={<Switch checked={showRegression} size="small" onChange={toggleRegression} />}
@@ -156,6 +164,9 @@ export function DuckDbScatter({
             }
           />
         </FormControl>
+        </Grid>
+          </Grid>
+        </Grid>
       </Grid>
 
       {chartLoading && <Alert severity="info">Loading chart concepts from DuckDB...</Alert>}
@@ -192,7 +203,7 @@ export function DuckDbScatter({
             height={460}
             hitAreaRadius="item"
             slots={{ tooltip: ConceptTooltip }}
-            onItemClick={(_: any, d: ScatterItemIdentifier) => {
+            onItemClick={(_: unknown, d: ScatterItemIdentifier) => {
               copy(dataset[d.dataIndex].label, "Copied Concept Name")
             }}
           >
@@ -464,7 +475,11 @@ function ConceptTooltipContent({
                 value={formatNumber(detail.effectSize)}
                 highlight={metric === "effectSize"}
               />
-              {/* <MetricChip label="SMD" value={formatNumber(detail.smd)} highlight={false} /> */}
+              <MetricChip
+                label="Standardized effect"
+                value={formatNumber(detail.smd)}
+                highlight={metric === "standardizedEffect"}
+              />
             </Box>
           </Fragment>
         )
