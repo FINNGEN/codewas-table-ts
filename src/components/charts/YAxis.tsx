@@ -56,7 +56,7 @@ export function YAxis({ yScale, x, domain, tickCount = 8, label }: yAxisProps) {
               color="#e0e0e0"
               lineWidth={0.5}
             /> */}
-            {/* Tick label — nudge it to the outer side */}
+            {/* Tick label - nudge it to the outer side */}
             <Text
               position={[isLeft ? x - 0.4 : x + 0.4, 0, 0]}
               color="black"

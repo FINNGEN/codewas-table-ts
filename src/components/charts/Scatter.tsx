@@ -156,7 +156,7 @@ export function Scatter({ data }: { data: MRT_TableInstance<ConceptRow> }) {
               markerSize: 3,
               label: "Concept",
               color: palette[2],
-              valueFormatter: (v) => v && `${v.id} — x: ${v.x}, y: ${v.y}`,
+              valueFormatter: (v) => v && `${v.id} - x: ${v.x}, y: ${v.y}`,
             },
           ]}
           xAxis={[

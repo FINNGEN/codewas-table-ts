@@ -43,8 +43,8 @@ const ColorScaleSlider = styled(Slider, {
 
 // Controlled multi-thumb slider whose rail renders hard-stop buckets. The thumbs are the bucket
 // breakpoints (value units); `colors` must have one more entry than `value` (N thumbs -> N+1 buckets).
-// Pass `segmentStyles` (same length as `colors`) to render each bucket as a CSS background — e.g. the
-// heatmap's texture swatches — instead of a flat color; the rail then mirrors what the cells look like.
+// Pass `segmentStyles` (same length as `colors`) to render each bucket as a CSS background - e.g. the
+// heatmap's texture swatches - instead of a flat color; the rail then mirrors what the cells look like.
 export default function MultiTrackColorSlider({
   value,
   onChange,
@@ -59,7 +59,7 @@ export default function MultiTrackColorSlider({
   onChange: (value: number[]) => void
   colors: string[]
   segmentStyles?: CSSProperties[] | null
-  // Rail height in segmented mode — textures need more room than a flat color to read. The caller
+  // Rail height in segmented mode - textures need more room than a flat color to read. The caller
   // passes the same value to whatever built `segmentStyles`, so the tiles divide the rail evenly.
   segmentHeight?: number
   min?: number
@@ -88,7 +88,7 @@ export default function MultiTrackColorSlider({
       min={min}
       max={max}
       track={false} // hide MUI's single track; the rail does the work
-      disableSwap // thumbs can't cross — keeps the buckets ordered
+      disableSwap // thumbs can't cross - keeps the buckets ordered
       valueLabelDisplay="auto"
       valueLabelFormat={(v: number) => v.toFixed(1)}
       marks={marks}

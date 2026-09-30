@@ -4,7 +4,7 @@ import { appTheme } from "../../../theme"
 import { HEATMAP_EMPTY_COLOR } from "../constants"
 
 /* ============================================================================
- * HEATMAP TEXTURE RAMP — the whole tweak surface lives in this block.
+ * HEATMAP TEXTURE RAMP - the whole tweak surface lives in this block.
  *
  * Evidence strength is encoded as *texture* density instead of color intensity,
  * which frees the color channel for other variables. Cells are quantized into
@@ -42,24 +42,24 @@ export type PatternSpec =
       kind: "lines"
       tile: number // *hint* for the repeat period; snapped up to a whole number of lines
       width: number // stroke width (in inverted mode: the width of the *gaps*)
-      spacing: number // perpendicular distance between lines — always honored exactly
+      spacing: number // perpendicular distance between lines - always honored exactly
       angleDeg: number // 45 = "/", 135 = "\"; snapped to the nearest tileable slope (see LINE_SLOPES)
-      inverted?: boolean // ink-filled tile with background-colored lines — reads as the negative
+      inverted?: boolean // ink-filled tile with background-colored lines - reads as the negative
     }
 
-// Weakest → strongest.
+// Weakest -> strongest.
 export const HEATMAP_PATTERNS: PatternSpec[] = [
-  // 1 — sparse dot grid
+  // 1 - sparse dot grid
   { kind: "dots", tile: 7, radius: 1.0, count: 1, gap: 2.5, angleDeg: 45 },
-  // 2 — dot pairs at 45°
+  // 2 - dot pairs at 45 deg
   { kind: "dots", tile: 7, radius: 1.0, count: 2, gap: 2.5, angleDeg: 45 },
-  // 3 — dot triplets at 45°
+  // 3 - dot triplets at 45 deg
   { kind: "dots", tile: 7, radius: 1.0, count: 3, gap: 2.5, angleDeg: 45 },
-  // 4 — thin diagonal lines
+  // 4 - thin diagonal lines
   { kind: "lines", tile: 8, width: 1.0, spacing: 4, angleDeg: 60 },
-  // 5 — thick diagonal lines
+  // 5 - thick diagonal lines
   { kind: "lines", tile: 8, width: 2, spacing: 4, angleDeg: 60 },
-  // 6 — inverted: mostly ink, the thin gaps read as the pattern
+  // 6 - inverted: mostly ink, the thin gaps read as the pattern
   { kind: "lines", tile: 8, width: 3, spacing: 4, angleDeg: 60, inverted: false },
   // { kind: "lines", tile: 8, width: 4, spacing: 4, angleDeg: 60, inverted: false },
 ]
@@ -76,7 +76,7 @@ export const HEATMAP_LEVEL_COLORS = HEATMAP_PATTERNS.map((_, index) =>
 
 // --- quantization ----------------------------------------------------------
 
-// Continuous scale (per-column / global max) → level index, or null for a blank cell.
+// Continuous scale (per-column / global max) -> level index, or null for a blank cell.
 export function heatmapPatternLevel(value: number | null, maxValue: number): number | null {
   if (value == null) return null
   if (!Number.isFinite(value)) return HEATMAP_LEVEL_COUNT - 1
@@ -86,7 +86,7 @@ export function heatmapPatternLevel(value: number | null, maxValue: number): num
   return Math.min(HEATMAP_LEVEL_COUNT - 1, Math.floor(shaped * HEATMAP_LEVEL_COUNT))
 }
 
-// Bucketed scale (draggable breakpoints) → level index. One level per bucket, so
+// Bucketed scale (draggable breakpoints) -> level index. One level per bucket, so
 // `breakpoints.length` must be HEATMAP_LEVEL_COUNT - 1.
 export function bucketPatternLevel(value: number | null, breakpoints: number[]): number | null {
   if (value == null) return null
@@ -100,21 +100,21 @@ export function bucketPatternLevel(value: number | null, breakpoints: number[]):
 
 // A family of parallel lines only repeats inside a square tile when its slope is rational: the tile
 // edges have to land on line positions, and for an irrational slope they never do (that is why a raw
-// 60° hatch shows a seam at every tile boundary). `angleDeg` is therefore snapped to the nearest
-// rise:run here — 30° → 26.6°, 60° → 63.4°.
+// 60 deg hatch shows a seam at every tile boundary). `angleDeg` is therefore snapped to the nearest
+// rise:run here - 30 deg -> 26.6 deg, 60 deg -> 63.4 deg.
 const LINE_SLOPES: [number, number][] = [
-  [0, 1], // 0°
-  [1, 3], // 18.4°
-  [1, 2], // 26.6°
-  [2, 3], // 33.7°
-  [1, 1], // 45°
-  [3, 2], // 56.3°
-  [2, 1], // 63.4°
-  [3, 1], // 71.6°
-  [1, 0], // 90°
+  [0, 1], // 0 deg
+  [1, 3], // 18.4 deg
+  [1, 2], // 26.6 deg
+  [2, 3], // 33.7 deg
+  [1, 1], // 45 deg
+  [3, 2], // 56.3 deg
+  [2, 1], // 63.4 deg
+  [3, 1], // 71.6 deg
+  [1, 0], // 90 deg
 ]
 
-// Snapped slope as integer rise:run. Angles past 90° mirror it ("/" becomes "\").
+// Snapped slope as integer rise:run. Angles past 90 deg mirror it ("/" becomes "\").
 function lineSlope(angleDeg: number) {
   const normalized = ((angleDeg % 180) + 180) % 180
   const target = normalized > 90 ? 180 - normalized : normalized
@@ -148,7 +148,7 @@ const tileCache = new Map<string, Tile>()
 
 // Render one pattern tile into a `sizePx`-square canvas. The spec's geometry is in CSS px; the
 // context is pre-scaled so it fills the canvas exactly, whatever size the caller asked for (that is
-// how a cell gets a whole number of tile rows — see paintHeatmapCell). Motifs are drawn wrapped
+// how a cell gets a whole number of tile rows - see paintHeatmapCell). Motifs are drawn wrapped
 // across the tile edges so the repeat is seamless.
 function renderTile(level: number, sizePx: number): Tile {
   const key = `${level}@${sizePx}`
@@ -171,7 +171,7 @@ function renderTile(level: number, sizePx: number): Tile {
 
   if (spec.kind === "dots") {
     // Cluster centered in the tile, its dots stepping along `angleDeg`. Canvas y
-    // grows downward, so negate the angle to keep 45° reading as "up-right".
+    // grows downward, so negate the angle to keep 45 deg reading as "up-right".
     const radians = (-spec.angleDeg * Math.PI) / 180
     const ux = Math.cos(radians)
     const uy = Math.sin(radians)
@@ -193,7 +193,7 @@ function renderTile(level: number, sizePx: number): Tile {
   } else {
     // Lines of the family rise·x + run·y = j·step. `step` is the requested perpendicular spacing
     // expressed in those units; because the tile is a whole number of periods, the value at every
-    // tile corner is a multiple of it — which is exactly the condition for a seamless repeat.
+    // tile corner is a multiple of it - which is exactly the condition for a seamless repeat.
     const { rise, run, length } = lineSlope(spec.angleDeg)
     const step = spec.spacing * length
     const corners = [0, rise * tile, run * tile, (rise + run) * tile]
@@ -240,12 +240,12 @@ function getPattern(context: CanvasRenderingContext2D, level: number, sizePx: nu
 }
 
 // Fit a whole number of tile rows into a cell `height` CSS px tall. Without this the last row of
-// every cell is a clipped sliver — a 7px tile in a 9px row shows one row of dots plus a 2px band of
+// every cell is a clipped sliver - a 7px tile in a 9px row shows one row of dots plus a 2px band of
 // the next one, which is what makes the repeat look broken.
 //
 // `sizePx` is the source canvas (integer device px, so it can be rasterized) and `tile` is the size
 // it is drawn at (fractional, so rows × tile is exactly the cell height). They agree whenever the
-// cell divides evenly — the usual retina case — and differ by a hair otherwise.
+// cell divides evenly - the usual retina case - and differ by a hair otherwise.
 function fitTileToCell(level: number, height: number, dpr: number) {
   const target = height * dpr
   const rows = Math.max(1, Math.round(target / (specTile(HEATMAP_PATTERNS[level]) * dpr)))
@@ -258,7 +258,7 @@ function fitTileToCell(level: number, height: number, dpr: number) {
 //
 // `origin` is where the texture's tile grid starts. Every cell that shares an origin is a window
 // onto one continuous field, so same-level neighbours join up instead of each restarting the pattern
-// at its own edge — which matters because cell widths are data-driven and rarely whole tiles. Pass
+// at its own edge - which matters because cell widths are data-driven and rarely whole tiles. Pass
 // the row's left edge (constant x, the row's own y) and a run of equal cells reads as one texture.
 // Omit it and each cell tiles from its own corner, self-contained.
 //

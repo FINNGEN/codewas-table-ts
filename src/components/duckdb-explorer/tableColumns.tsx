@@ -187,7 +187,7 @@ export function makeContinuousColumns(
 
 // Chip tone per AI category. theme.ts leaves success/warning/info at the MUI defaults precisely
 // because they carry real semantics here, and that is what these labels want: "expected" reads as
-// confirmed, "unexpected" as worth a look. The reserved channels stay reserved — purple is only ever
+// confirmed, "unexpected" as worth a look. The reserved channels stay reserved - purple is only ever
 // a p-value. A category from a newer prompt version that isn't listed falls back to the neutral chip
 // rather than borrowing a meaning it may not have.
 const AI_CATEGORY_TONE: Record<string, "success" | "warning" | "info"> = {
@@ -198,7 +198,7 @@ const AI_CATEGORY_TONE: Record<string, "success" | "warning" | "info"> = {
 
 // The AI verdict as it appears inside the pinned Info cell. The rationale rides along as a tooltip so
 // the reasoning is reachable even when the Rationale column is hidden. A plain render function, like
-// valueChip/logPChip above, rather than a component — this module exports column builders, not
+// valueChip/logPChip above, rather than a component - this module exports column builders, not
 // components, and a local component here breaks fast refresh for the whole file.
 function aiCategoryChip(category: string, rationale?: string | null) {
   const chip = (
@@ -220,7 +220,7 @@ function aiCategoryChip(category: string, rationale?: string | null) {
 }
 
 // Only mounted when the loaded database ships `aiPrioritization`. Filtering and sorting are off
-// because neither buildFilterConditions nor buildSortExpression maps this column — an input here
+// because neither buildFilterConditions nor buildSortExpression maps this column - an input here
 // would silently do nothing, since the rows come back already filtered by SQL. The category itself
 // is not a column: it lives in the Info cell above, and is filtered from the toolbar selector.
 function makeAiReviewColumns(): MRT_ColumnDef<ConceptSummaryRow> {
@@ -336,7 +336,7 @@ export function buildColumns(aiAvailable = false): MRT_ColumnDef<ConceptSummaryR
                     fontWeight: 700,
                     // Names run long, so they wrap inside the column's fixed width instead of
                     // spilling out of it. Compact density puts `nowrap` on every body cell, and a
-                    // flex child won't shrink past its longest word on its own — hence all three.
+                    // flex child won't shrink past its longest word on its own - hence all three.
                     whiteSpace: "normal",
                     overflowWrap: "anywhere",
                     minWidth: 0,

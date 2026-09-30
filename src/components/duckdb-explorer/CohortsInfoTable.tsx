@@ -6,7 +6,7 @@ type CohortsInfoTableProps = {
 }
 
 // This is a page header, not a data grid: there is one row per cohort (cases / controls), so it is
-// styled as a slim legend — borderless, tight padding, and sized to its content rather than the full
+// styled as a slim legend - borderless, tight padding, and sized to its content rather than the full
 // width. MUI's `size="small"` still pads 6px vertically, hence the explicit `py`.
 
 const cellSx = {

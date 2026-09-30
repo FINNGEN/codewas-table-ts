@@ -121,7 +121,7 @@ export default function DuckDbExplorer({
   const hierarchyLoadingParentRowKeysRef = useRef(new Set<string>())
 
   // The AI review tables are optional. `dataSource.tableCounts` is already the full main-schema
-  // listing taken at load time, so presence is known synchronously during render — no probe query,
+  // listing taken at load time, so presence is known synchronously during render - no probe query,
   // and no first pass that queries a shape the database does not have.
   const aiAvailable = useMemo(
     () => dataSource.tableCounts.some((table) => table.tableName === AI_PRIORITIZATION_TABLE),
@@ -152,13 +152,13 @@ export default function DuckDbExplorer({
 
   // The rationale is long free text, so it only claims column width while the user is actually
   // working with the AI verdicts. Both updates happen here, in the one place the category can
-  // change (selector, chip clear, preset), so they land in a single commit — and so hiding the
+  // change (selector, chip clear, preset), so they land in a single commit - and so hiding the
   // column by hand afterwards sticks until the category moves again.
   const changeAiCategory = useCallback(
     (next: string) => {
       // Presets are shared across every DuckDB file the user opens, so one saved against a database
       // with AI verdicts can be applied to one without them. There the category filters nothing, so
-      // it is not adopted either — otherwise a chip would claim a filter that is not being applied.
+      // it is not adopted either - otherwise a chip would claim a filter that is not being applied.
       const resolved = aiAvailable ? next : AI_CATEGORY_ALL
       setSelectedAiCategory(resolved)
       setColumnVisibility((current) => ({
@@ -532,8 +532,8 @@ export default function DuckDbExplorer({
     // side, and nothing wires onGlobalFilterChange into the SQL, so typing in it did nothing. The
     // toolbar's Search field below is the real one. Dropping it also removes an icon button.
     enableGlobalFilter: false,
-    // Unlike the bottom toolbar, this one's inner row is in flow — MRT switches it to
-    // position: relative as soon as renderTopToolbarCustomActions is set — so the toolbar auto-sizes
+    // Unlike the bottom toolbar, this one's inner row is in flow - MRT switches it to
+    // position: relative as soon as renderTopToolbarCustomActions is set - so the toolbar auto-sizes
     // to its content and minHeight can safely go to 0.
     muiTopToolbarProps: {
       sx: {
@@ -562,8 +562,8 @@ export default function DuckDbExplorer({
     // target MRT's own stable class names.
     //
     // minHeight cannot go to 0: MRT positions the pagination wrapper absolutely (right: 0, top: 0),
-    // so it contributes no height and the toolbar would collapse onto its only in-flow child — an
-    // empty <span/> — leaving the pagination hanging past the bottom edge, behind the footer. This
+    // so it contributes no height and the toolbar would collapse onto its only in-flow child - an
+    // empty <span/> - leaving the pagination hanging past the bottom edge, behind the footer. This
     // floor has to stay >= the pagination's own height (~29px measured with the font sizes below).
     muiBottomToolbarProps: {
       sx: {
@@ -599,7 +599,7 @@ export default function DuckDbExplorer({
       sorting: [{ id: "binaryEffect", desc: true }],
       pagination: { pageSize: 20, pageIndex: 0 },
       density: "compact",
-      // Pinning state holds *leaf* column ids only — TanStack matches them against each column's
+      // Pinning state holds *leaf* column ids only - TanStack matches them against each column's
       // leaves, so the "info" group id would never resolve. Its two leaves have to be named instead.
       columnPinning: { left: ["mrt-row-expand", "conceptInfo", "ancestorConceptIds", "info"] },
       showColumnFilters: false,
@@ -634,7 +634,7 @@ export default function DuckDbExplorer({
         // No `position` here: MRT already gives body cells `position: relative`, and a pinned cell
         // gets `sticky` instead. A rule at this level (`.row-class td:first-of-type`) outranks the
         // cell's own class, so re-declaring `relative` would un-stick the pinned first column while
-        // leaving the header — a <th>, untouched by this row sx — stuck. Either value still anchors
+        // leaving the header - a <th>, untouched by this row sx - stuck. Either value still anchors
         // the ::before depth bar below.
         "& td:first-of-type::before":
           tableMode === "hierarchy" && row.depth > 0

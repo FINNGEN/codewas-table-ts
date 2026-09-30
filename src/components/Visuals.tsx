@@ -1,4 +1,4 @@
-// visuals.tsx — lightweight inline charts, no extra charting library needed
+// visuals.tsx - lightweight inline charts, no extra charting library needed
 import {
   Box,
   Typography,
@@ -22,10 +22,10 @@ const controlsColor = "controls.main"
 // Renders a small dot-and-line chart comparing cases vs controls means.
 // Uses an SVG so it's crisp at any size with zero dependencies.
 //
-// Layout (all values mapped into a 0–100 px range):
+// Layout (all values mapped into a 0-100 px range):
 //   [min anchor]----[cases dot]----[controls dot]----[max anchor]
 //
-// The ±SD is shown as a shaded band around each dot.
+// The +/-SD is shown as a shaded band around each dot.
 
 interface GenericTableProps<T extends object> {
   rows: T[]
@@ -86,7 +86,7 @@ export function MeanComparisonChart({ stats, distributions, unit = "" }: MeanCom
   const theme = useTheme()
   const { meanValueCases, meanValueControls, sdValueCases, sdValueControls } = stats
 
-  // Build a domain that comfortably fits both means ± their SDs
+  // Build a domain that comfortably fits both means +/- their SDs
   const allValues = [
     meanValueCases - sdValueCases,
     meanValueCases + sdValueCases,
@@ -148,11 +148,11 @@ export function MeanComparisonChart({ stats, distributions, unit = "" }: MeanCom
           <Box>
             <Typography variant="body2">
               Cases: {fmt1(meanValueCases)}
-              {unit} ± {fmt1(sdValueCases)}
+              {unit} +/- {fmt1(sdValueCases)}
             </Typography>
             <Typography variant="body2">
               Controls: {fmt1(meanValueControls)}
-              {unit} ± {fmt1(sdValueControls)}
+              {unit} +/- {fmt1(sdValueControls)}
             </Typography>
             {distributions && <GenericTable rows={distributions} />}
           </Box>
@@ -202,7 +202,7 @@ function BoxPlot({ name, transform = "", x1, x2, cx, cy, color, sd, h = 10 }: Bo
     <g className={name} transform={transform}>
       {/* Baseline */}
       <line x1={x1} y1={cy} x2={x2} y2={cy} stroke={color} strokeWidth={1} />
-      {/* SD band — cases */}
+      {/* SD band - cases */}
       <rect
         x={cx - sd}
         y={cy - h / 2}
@@ -217,7 +217,7 @@ function BoxPlot({ name, transform = "", x1, x2, cx, cy, color, sd, h = 10 }: Bo
       <rect x={x1} y={cy - h / 2 + 1} width={1} height={h - 2} fill={color} />
       <rect x={x2} y={cy - h / 2 + 1} width={1} height={h - 2} fill={color} />
 
-      {/* Dot — cases */}
+      {/* Dot - cases */}
       {/* <circle cx={cx} cy={cy} r={5} fill={theme.palette.cases.main} /> */}
     </g>
   )
@@ -229,7 +229,7 @@ function BoxPlot({ name, transform = "", x1, x2, cx, cy, color, sd, h = 10 }: Bo
 // of a category relative to the total for that group.
 // Used inside BinaryDistributionTable and future categorical tables.
 //
-// total = cases total across all rows for normalisation — pass it in so
+// total = cases total across all rows for normalisation - pass it in so
 // the bar widths are comparable across rows.
 
 interface CategoryBarProps {
@@ -247,7 +247,7 @@ export function CategoryBar({
   totalControls,
   maxWidth = 50,
 }: CategoryBarProps) {
-  // Proportions 0–1; guard against divide-by-zero
+  // Proportions 0-1; guard against divide-by-zero
   const casePct = totalCases > 0 ? caseCount / totalCases : 0
   const ctrlPct = totalControls > 0 ? controlCount / totalControls : 0
 

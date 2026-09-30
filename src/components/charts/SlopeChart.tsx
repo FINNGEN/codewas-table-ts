@@ -85,11 +85,11 @@ export function SlopeChart({ data, visibleDataIds }: SlopeChartProps) {
 
   const [x1, x2] = [-worldWidth / 2 + 1, worldWidth / 2 - 1]
 
-  /* WIP: nearest-line hover detection — re-enable with onMouseMove on the canvas container below
+  /* WIP: nearest-line hover detection - re-enable with onMouseMove on the canvas container below
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
       const rect = e.currentTarget?.getBoundingClientRect()
-      const xRatio = (e.clientX - rect.left) / rect.width // 0→1 left to right
+      const xRatio = (e.clientX - rect.left) / rect.width // 0->1 left to right
       const yRatio = (e.clientY - rect.top) / rect.height
 
       const worldY = (1 - yRatio) * worldHeight - worldHeight / 2
@@ -163,7 +163,7 @@ export function SlopeChart({ data, visibleDataIds }: SlopeChartProps) {
   )
 }
 
-/* WIP: GPU line rendering — currently disabled at the call site above
+/* WIP: GPU line rendering - currently disabled at the call site above
 function AllLines({ data, visibleDataIds, yScale, x1, x2 }: AllLinesProps) {
   const { selectedGeo, unselectedGeo } = useMemo(() => {
     const selected = data.filter((d) => visibleDataIds.includes(d.id))
@@ -253,12 +253,12 @@ export function RangePolygons({ data, yScale, x1, x2 }: RangePolygonsProps) {
 
   return (
     <>
-      {/* Cases polygon — anchored on the left (cases axis) */}
+      {/* Cases polygon - anchored on the left (cases axis) */}
       <mesh geometry={casesGeo}>
         <meshBasicMaterial color="red" opacity={0.3} transparent side={THREE.DoubleSide} />
       </mesh>
 
-      {/* Controls polygon — anchored on the right (controls axis) */}
+      {/* Controls polygon - anchored on the right (controls axis) */}
       <mesh geometry={controlsGeo}>
         <meshBasicMaterial color="blue" opacity={0.3} transparent side={THREE.DoubleSide} />
       </mesh>

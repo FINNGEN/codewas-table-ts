@@ -145,7 +145,7 @@ export default function MainTable({ data, setData, pageView }: ConceptTableProps
 
     defaultColumn: {
       minSize: 20,
-      size: 115, // starting point — override per column as needed
+      size: 115, // starting point - override per column as needed
       maxSize: 400,
     },
     // ── expand ──

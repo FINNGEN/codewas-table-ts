@@ -45,7 +45,7 @@ export function DuckDbCharts({
             label="Chart Mode"
             onChange={(event) => setChartMode(event.target.value as ChartMode)}
           >
-            {/* Icon alignment (open + closed) is handled globally by the theme — see App.tsx. */}
+            {/* Icon alignment (open + closed) is handled globally by the theme - see App.tsx. */}
             <MenuItem value="heatmap">
               <Map sx={{ fontSize: 16 }} />
               Heatmap

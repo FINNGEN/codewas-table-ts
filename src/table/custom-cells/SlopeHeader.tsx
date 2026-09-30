@@ -11,7 +11,7 @@ interface SlopeHeaderProps {
 }
 
 export function SlopeHeader({ label }: SlopeHeaderProps) {
-  // WIP: per-header slope chart — disabled until the chart below is re-enabled.
+  // WIP: per-header slope chart - disabled until the chart below is re-enabled.
   /*
   const allValues = table.getFilteredRowModel().rows.map((row) => ({
     id: row.getValue<number>(idKey),

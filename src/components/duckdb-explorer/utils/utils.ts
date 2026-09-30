@@ -9,7 +9,7 @@ export function formatNumber(value: number | null | undefined, digits = 2) {
 
 // A p-value of exactly 0 is IEEE-754 underflow, not a true zero: the smallest positive double is
 // ~4.94e-324, so any p below that is written as 0 on export. -log10(0) is +Infinity, so every layer
-// used to map p = 0 to null — which rendered the *most* significant hits as "N/A", sorted them last
+// used to map p = 0 to null - which rendered the *most* significant hits as "N/A", sorted them last
 // (NULLS LAST) and dropped them from "> x" filters. Clamp to the underflow ceiling instead: the true
 // -log10(p) is at least this large.
 export const MAX_NEG_LOG10 = -Math.log10(Number.MIN_VALUE) // ≈ 323.31
@@ -53,7 +53,7 @@ function tsvEscape(value: unknown) {
 
 export function summaryRowsToTsv(rows: ConceptSummaryRow[]) {
   // The AI review pass is optional, so its two columns are only added when the exported rows
-  // actually carry a verdict — an export from a database without the AI tables keeps the header it
+  // actually carry a verdict - an export from a database without the AI tables keeps the header it
   // has always had.
   const includeAi = rows.some((row) => row.aiCategory != null || row.aiRationale != null)
   const exportRows = rows.map((row) => ({

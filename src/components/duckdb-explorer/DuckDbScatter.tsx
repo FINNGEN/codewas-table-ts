@@ -151,7 +151,7 @@ export function DuckDbScatter({
             control={<Switch checked={showRegression} size="small" onChange={toggleRegression} />}
             label={
               Number.isFinite(regression.m)
-                ? `Regression line (β = ${regression.m.toFixed(3)}, R² = ${regression.r2.toFixed(2)})`
+                ? `Regression line (β = ${regression.m.toFixed(3)}, R^2 = ${regression.r2.toFixed(2)})`
                 : "Regression line"
             }
           />
@@ -287,22 +287,22 @@ function readString(row: ConceptSummaryRow, field: string): string | null {
 }
 
 function formatNumber(value: number | null, digits = 2): string {
-  if (value == null || !Number.isFinite(value)) return "—"
+  if (value == null || !Number.isFinite(value)) return "-"
   const abs = Math.abs(value)
   if (abs !== 0 && (abs < 1e-3 || abs >= 1e5)) return value.toExponential(1)
   return value.toLocaleString(undefined, { maximumFractionDigits: digits })
 }
 
 function formatPValue(value: number | null): string {
-  if (value == null || !Number.isFinite(value)) return "—"
+  if (value == null || !Number.isFinite(value)) return "-"
   if (value === 0) return "0"
   if (value < 1e-3) return value.toExponential(1)
   return value.toLocaleString(undefined, { maximumFractionDigits: 3 })
 }
 
 function meanSd(mean: number | null, sd: number | null): string {
-  if (mean == null) return "—"
-  return sd == null ? formatNumber(mean) : `${formatNumber(mean)} ± ${formatNumber(sd)}`
+  if (mean == null) return "-"
+  return sd == null ? formatNumber(mean) : `${formatNumber(mean)} +/- ${formatNumber(sd)}`
 }
 
 type StatLine = { label: string; caseText: string; controlText: string }
@@ -354,7 +354,7 @@ function getBlockDetail(row: ConceptSummaryRow, block: ChartBlockKey): BlockDeta
         controlText: formatNumber(readNumber(row, `${prefix}ControlCount`), 0),
       },
       {
-        label: "Mean ± SD",
+        label: "Mean +/- SD",
         caseText: meanSd(readNumber(row, `${prefix}CaseMean`), readNumber(row, `${prefix}CaseSd`)),
         controlText: meanSd(
           readNumber(row, `${prefix}ControlMean`),
