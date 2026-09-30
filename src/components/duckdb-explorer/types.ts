@@ -144,9 +144,9 @@ export type ChartScope = "filtered" | "all"
 export type TableMode = "flat" | "hierarchy"
 export type HeatmapOrderMode = "strongest" | "selectedBlock" | "repeatEvidence" | "clustered"
 export type HeatmapScaleMode = "global" | "perColumn"
-// What drives the overview's cell color: -log10(p) (the original encoding), SD-standardized effect clamped to
-// ±OVERVIEW_SMD_CAP, or SD-standardized effect z-scored within each analysis row.
-export type OverviewColorMetric = "pValue" | "smdCapped" | "smdRowScaled"
+// What drives the overview's cell color: -log10(p), full-range standardized effect,
+// or the standardized effect z-scored within each analysis row.
+export type OverviewColorMetric = "pValue" | "smdRaw" | "smdRowScaled"
 
 export type HeatmapCell = {
   row: ConceptSummaryRow
