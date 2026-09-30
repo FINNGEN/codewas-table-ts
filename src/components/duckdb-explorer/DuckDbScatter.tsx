@@ -32,8 +32,31 @@ import { getChartMetricValue } from "./utils/heatmapUtils"
 import { negLog10 } from "./utils/utils"
 import type { ChartBlockKey, ChartMetricKey, ConceptSummaryRow } from "./types"
 import { useClipboard } from "./context/ClipboardContext"
+import { ChartAboutDialog } from "./ChartAboutDialog"
 
 type ScatterPoint = { id: string; label: string; x: number | null; y: number | null }
+
+function ScatterInfoModal() {
+  return (
+    <ChartAboutDialog>
+      <Typography variant="body2">
+        Each point is a concept result with values for both selected analysis types. <b>Chart
+        scope</b> chooses whether to show filtered or all loaded concepts. <b>X axis</b> and <b>Y
+        axis</b> choose the analyses; <b>Metric</b> applies the same measure to both: -log10(p), raw
+        effect size, or standardized effect. Results missing either value are omitted.
+      </Typography>
+      <Typography variant="body2">
+        Standardized effects help compare analyses, but they remain analysis-specific measures.
+        Hover for the concept and its results; click a point to copy its concept name.
+      </Typography>
+      <Typography variant="body2">
+        The <b>Regression line</b> is a descriptive straight-line fit to the displayed points. Its
+        beta is the slope and R-squared describes fit; neither establishes causation. If more than
+        {" "}3,000 points qualify, the chart shows a limit warning.
+      </Typography>
+    </ChartAboutDialog>
+  )
+}
 
 export function DuckDbScatter({
   rows,
@@ -102,6 +125,9 @@ export function DuckDbScatter({
         <Grid size={12}>
           <Grid container spacing={2}>
             {sharedControls}
+            <Grid size={{ xs: 12, md: 6 }} sx={{ display: "flex", justifyContent: "flex-end" }}>
+              <ScatterInfoModal />
+            </Grid>
           </Grid>
         </Grid>
         <Grid size={12}>
