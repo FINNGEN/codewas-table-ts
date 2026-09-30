@@ -29,8 +29,6 @@ import {
   HEATMAP_BLOCKS,
   OVERVIEW_MIN_COL_PX,
   OVERVIEW_MIN_LABEL_PX,
-  OVERVIEW_ROW_Z_LIMIT,
-  OVERVIEW_SMD_CAP,
 } from "./constants"
 import {
   computeHeatmapDerived,
@@ -88,7 +86,7 @@ const HORIZONTAL_GUTTER = 0
 // Per-node rollup: MAX -log10(p) per block over the node's whole subtree (itself + all descendants),
 // plus the subtree concept count and its strongest block (for sorting and the tooltip). `color` is
 // the value the SD-effect color modes paint: per block, the subtree value furthest from zero, sign kept -
-// the raw SD-standardized effect in capped mode (clamped only when painted, so the caption shows the true value) or
+// the raw SD-standardized effect in the unscaled mode or
 // the row z-score in row-scaled mode. All-null in p-value mode, which paints from `maxLogp`.
 type SubtreeAgg = {
   maxLogp: (number | null)[]
@@ -159,20 +157,15 @@ function truncateToWidth(context: CanvasRenderingContext2D, text: string, maxWid
   return `${truncated}...`
 }
 
-// Saturation point of the diverging ramp per SD-effect mode: values at or beyond +/-limit get the full hue.
-function colorLimit(metric: OverviewColorMetric) {
-  return metric === "smdRowScaled" ? OVERVIEW_ROW_Z_LIMIT : OVERVIEW_SMD_CAP
-}
-
 const COLOR_METRIC_LABEL: Record<OverviewColorMetric, string> = {
   pValue: "max -log10(p)",
-  smdCapped: "SD effect",
-  smdRowScaled: "row-scaled SD effect",
+  smdRaw: "standardized effect",
+  smdRowScaled: "row-scaled standardized effect",
 }
 
 const SORT_METRIC_LABEL: Record<OverviewColorMetric, string> = {
   pValue: "-log10(p)",
-  smdCapped: "|SD effect|",
+  smdRaw: "|standardized effect|",
   smdRowScaled: "|z|",
 }
 
@@ -189,6 +182,7 @@ function OverviewLevel({
   columns,
   activeRowKey,
   colorMetric,
+  colorRange,
   scaleMode,
   perColumnMax,
   bucketBreakpoints,
@@ -199,6 +193,7 @@ function OverviewLevel({
   columns: Column[]
   activeRowKey: string | null
   colorMetric: OverviewColorMetric
+  colorRange: number
   scaleMode: HeatmapScaleMode
   perColumnMax: Record<ChartBlockKey, number>
   bucketBreakpoints: number[]
@@ -365,7 +360,7 @@ function OverviewLevel({
           if (value == null) {
             paintHeatmapCell(context, null, x, y, cellWidth, ROW_HEIGHT - HORIZONTAL_GUTTER)
           } else {
-            context.fillStyle = divergingColor(value / colorLimit(colorMetric))
+            context.fillStyle = divergingColor(value / colorRange)
             context.fillRect(x, y, cellWidth, ROW_HEIGHT - HORIZONTAL_GUTTER)
           }
           continue
@@ -550,6 +545,7 @@ function OverviewLevel({
     bucketBreakpoints,
     canvasWidth,
     colorMetric,
+    colorRange,
     columnWidth,
     effectiveSort.dir,
     hovered,
@@ -776,9 +772,9 @@ function ColorRangeSlider({
   )
 }
 
-// Key for the SD-effect color modes: the diverging ramp from -limit to +limit.
-function DivergingLegend({ metric }: { metric: OverviewColorMetric }) {
-  const limit = colorLimit(metric)
+// Key for the SD-effect color modes: the same diverging range used by the canvas.
+function DivergingLegend({ metric, colorRange }: { metric: OverviewColorMetric; colorRange: number }) {
+  const label = Number(colorRange.toPrecision(3)).toString()
   const stops = Array.from({ length: 11 }, (_, index) => divergingColor(index / 5 - 1))
   return (
     <Box sx={{ px: 1, pt: 1 }}>
@@ -790,14 +786,14 @@ function DivergingLegend({ metric }: { metric: OverviewColorMetric }) {
         }}
       />
       <Stack direction="row" sx={{ justifyContent: "space-between" }}>
-        <Typography variant="caption">{"<= -"}{limit}</Typography>
+        <Typography variant="caption">-{label}</Typography>
         <Typography variant="caption">0</Typography>
-        <Typography variant="caption">{">= "}{limit}</Typography>
+        <Typography variant="caption">+{label}</Typography>
       </Stack>
       <Typography variant="caption" color="text.secondary">
         {metric === "smdRowScaled"
-          ? `SD-standardized effect z-scored per analysis row: (SD effect - row mean) / row SD, saturating at +/-${limit}`
-          : `SD-standardized effect capped at +/-${limit}`}
+          ? "Standardized effect z-scored per analysis row; full observed range"
+          : "Standardized effect; full observed range, symmetric around zero"}
       </Typography>
     </Box>
   )
@@ -841,10 +837,11 @@ function InfoModal() {
           >
             Each column is a concept. With <b>Color by: p-value</b> its texture shows the strongest
             -log10(p) evidence across that concept and all of its descendants - the denser the
-            pattern, the stronger the evidence. With the <b>SD effect</b> options the cell shows the
-            SD-standardized effect furthest from zero in that subtree (blue = lower in cases,
-            red = higher), either capped at +/-{OVERVIEW_SMD_CAP} or z-scored within each analysis
-            row. The bar under each column header shows what a click does - and, for parents, how
+            pattern, the stronger the evidence. With the <b>Standardized effect</b> options the cell
+            shows the standardized effect furthest from zero in that subtree (blue = lower in cases,
+            red = higher; categorical effects are unsigned), either shown on the full data range or
+            z-scored within each analysis row. The bar under each column header shows what a click
+            does - and, for parents, how
             many direct children it has:
             <Box
               component="span"
@@ -913,7 +910,7 @@ export function DuckDbOverview({
   onSelectConcept: (rowKey: string) => void
   sharedControls: ReactNode
 }) {
-  const [colorMetric, setColorMetric] = useState<OverviewColorMetric>("smdCapped")
+  const [colorMetric, setColorMetric] = useState<OverviewColorMetric>("smdRaw")
   const [scaleMode, setScaleMode] = useState<HeatmapScaleMode>("perColumn")
   const [searchText, setSearchText] = useState("")
   // Drill path of parent rowKeys. Empty = only the roots panel. Each entry adds a child panel below.
@@ -926,6 +923,24 @@ export function DuckDbOverview({
     () => computeHeatmapDerived(rows),
     [rows],
   )
+
+  // Full, symmetric ranges across every analysis and hierarchy level. Keep colors stable while
+  // searching or drilling; shared data filters change `rows` and recalculate the ranges.
+  const { maxAbsSmd, maxAbsRowZ } = useMemo(() => {
+    let maxAbsSmd = 0
+    let maxAbsRowZ = 0
+    for (const derived of derivedByKey.values()) {
+      for (let b = 0; b < derived.smd.length; b++) {
+        const value = derived.smd[b]
+        if (value == null) continue
+        maxAbsSmd = Math.max(maxAbsSmd, Math.abs(value))
+        const { mean, sd } = smdRowStats[b]
+        if (sd > 0) maxAbsRowZ = Math.max(maxAbsRowZ, Math.abs((value - mean) / sd))
+      }
+    }
+    return { maxAbsSmd: maxAbsSmd || 1, maxAbsRowZ: maxAbsRowZ || 1 }
+  }, [derivedByKey, smdRowStats])
+  const colorRange = colorMetric === "smdRowScaled" ? maxAbsRowZ : maxAbsSmd
 
   // The concept population for the overview: search-filtered. The hierarchy is rebuilt from this set,
   // so a filtered-out parent re-links its children to the nearest surviving ancestor (same as the table).
@@ -960,7 +975,7 @@ export function DuckDbOverview({
       const color: (number | null)[] = HEATMAP_BLOCKS.map((_, b) => {
         const smd = derived?.smd[b] ?? null
         if (smd == null || colorMetric === "pValue") return null
-        if (colorMetric === "smdCapped") return smd
+        if (colorMetric === "smdRaw") return smd
         const { mean, sd } = smdRowStats[b]
         return sd > 0 ? (smd - mean) / sd : 0
       })
@@ -1077,8 +1092,8 @@ export function DuckDbOverview({
               label="Color by"
               onChange={(event) => setColorMetric(event.target.value as OverviewColorMetric)}
             >
-              <MenuItem value="smdCapped">SD effect (capped +/-{OVERVIEW_SMD_CAP})</MenuItem>
-              <MenuItem value="smdRowScaled">SD effect (row-scaled)</MenuItem>
+              <MenuItem value="smdRaw">Standardized effect</MenuItem>
+              <MenuItem value="smdRowScaled">Standardized effect (row-scaled)</MenuItem>
               <MenuItem value="pValue">p-value (-log10)</MenuItem>
             </Select>
           </FormControl>
@@ -1116,7 +1131,7 @@ export function DuckDbOverview({
         </Grid>
         <Grid columns={2} size={{ xs: 12, sm: 6 }}>
           {colorMetric !== "pValue" ? (
-            <DivergingLegend metric={colorMetric} />
+            <DivergingLegend metric={colorMetric} colorRange={colorRange} />
           ) : scaleMode === "global" ? (
             <ColorRangeSlider
               value={breakpoints}
@@ -1185,6 +1200,7 @@ export function DuckDbOverview({
             columns={level.columns}
             activeRowKey={path[depth] ?? null}
             colorMetric={colorMetric}
+            colorRange={colorRange}
             scaleMode={scaleMode}
             perColumnMax={perColumnMax}
             bucketBreakpoints={breakpoints}

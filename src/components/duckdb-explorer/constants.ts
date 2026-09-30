@@ -72,15 +72,13 @@ export const OVERVIEW_MIN_LABEL_PX = 65
 export const OVERVIEW_RAMP_FROM = dataHues.pvalueFaint
 export const OVERVIEW_RAMP_TO = dataHues.pvalue
 // SD-effect color modes use a diverging blue <- neutral -> red ramp instead (SD-standardized effect is signed for all analyses except categorical; purple stays
-// reserved for p-values). Capped mode clamps SD effect to +/-OVERVIEW_SMD_CAP; row-scaled mode colors the
-// per-analysis z-score and saturates at +/-OVERVIEW_ROW_Z_LIMIT.
+// reserved for p-values). Both raw SD effect and per-analysis row-scaled z-scores span their full
+// observed ranges.
 export const OVERVIEW_DIVERGING_NEGATIVE = "#2872d9"
 export const OVERVIEW_DIVERGING_MID = "#F5F5F5"
 export const OVERVIEW_DIVERGING_POSITIVE = "#d6372c"
-export const OVERVIEW_SMD_CAP = 5
 // Cells with no value. A mid, chroma-free grey: clearly apart from the diverging ramp's near-white
 // midpoint (SD effect ˜ 0) and from the p-value ramp's faint end, and legible on both light and dark paper.
 export const HEATMAP_EMPTY_COLOR = "#ececec"
-export const OVERVIEW_ROW_Z_LIMIT = 3
 // The number of steps in both heatmap scales - and so the number of draggable breakpoints on the
 // global scale (steps - 1) - comes from HEATMAP_PATTERNS.length in utils/heatmapPatterns.
