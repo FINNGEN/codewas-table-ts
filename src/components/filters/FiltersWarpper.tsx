@@ -15,7 +15,7 @@ function isFilterActive(value: unknown): boolean {
 }
 
 function formatValue(value: unknown): string {
-  if (Array.isArray(value)) return `${value[0]} – ${value[1]}`
+  if (Array.isArray(value)) return `${value[0]} - ${value[1]}`
   return String(value)
 }
 

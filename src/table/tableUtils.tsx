@@ -52,4 +52,4 @@ export function groupCellProps(color: string): Partial<MRT_ColumnDef<ConceptRow>
   }
 }
 
-const fmt = (v: number | null, decimals = 4): string => (v === null ? "—" : v.toFixed(decimals))
+const fmt = (v: number | null, decimals = 4): string => (v === null ? "-" : v.toFixed(decimals))

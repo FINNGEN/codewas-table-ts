@@ -1,4 +1,4 @@
-// App.tsx — wire up the table with your JSON data
+// App.tsx - wire up the table with your JSON data
 import { ThemeProvider, CssBaseline, Alert, Box } from "@mui/material"
 import { appTheme } from "./theme"
 

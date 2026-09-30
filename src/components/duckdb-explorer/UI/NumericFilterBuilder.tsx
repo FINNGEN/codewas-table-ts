@@ -27,11 +27,11 @@ type Connector = "AND" | "OR"
 type Clause = { connector: Connector; operator: Operator; value: string }
 
 const OPERATORS: { value: Operator; label: string }[] = [
-  { value: ">=", label: "≥" },
+  { value: ">=", label: ">=" },
   { value: ">", label: ">" },
   { value: "=", label: "=" },
   { value: "<", label: "<" },
-  { value: "<=", label: "≤" },
+  { value: "<=", label: "<=" },
 ]
 const OPERATOR_LABEL = Object.fromEntries(OPERATORS.map((o) => [o.value, o.label])) as Record<
   Operator,
@@ -80,7 +80,7 @@ function serializeClauses(clauses: Clause[]) {
 }
 
 function prettyExpression(text: string) {
-  return text.replace(/>=/g, "≥").replace(/<=/g, "≤")
+  return text
 }
 
 type NumericFilterBuilderProps<TData extends MRT_RowData> = {
@@ -173,7 +173,7 @@ export function NumericFilterBuilder<TData extends MRT_RowData>({
             <Typography variant="subtitle2">{title}</Typography>
             {isLogP && (
               <Typography variant="caption" color="text.secondary">
-                Values are −log10(p): ≥ 5 means p ≤ 1e-5
+                {"Values are -log10(p): >= 5 means p <= 1e-5"}
               </Typography>
             )}
           </Box>

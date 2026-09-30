@@ -156,7 +156,7 @@ export function DuckDbHeatmap({
     context.font = "11px Hack, monospace"
     context.textBaseline = "middle"
 
-    // Body — only the rows intersecting the viewport (+overscan), clipped below the header.
+    // Body - only the rows intersecting the viewport (+overscan), clipped below the header.
     context.save()
     context.beginPath()
     context.rect(0, HEADER_HEIGHT, CANVAS_WIDTH, Math.max(0, viewportHeight - HEADER_HEIGHT))
@@ -388,7 +388,7 @@ export function DuckDbHeatmap({
           </Alert>
         )}
         <Typography variant="body2" color="text.secondary">
-          Cell texture shows -log10(p) evidence by analysis block — the denser the pattern, the
+          Cell texture shows -log10(p) evidence by analysis block - the denser the pattern, the
           stronger the evidence. Repeat counts show how many blocks pass the selected threshold.
           Click a cell to jump that concept back into the table.
         </Typography>

@@ -19,7 +19,7 @@
   color-scheme: light dark;
   /* The page surface is owned by the MUI theme via CssBaseline (see src/theme.ts). Painting
      :root here as well pinned <html> to a hardcoded color, and because the block below keys
-     off prefers-color-scheme it followed the OS rather than the in-app theme toggle — so
+     off prefers-color-scheme it followed the OS rather than the in-app theme toggle - so
      toggling to dark left a white page behind a dark body. */
   font-synthesis: none;
   text-rendering: optimizeLegibility;

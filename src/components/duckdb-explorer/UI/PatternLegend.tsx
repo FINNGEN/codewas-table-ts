@@ -1,7 +1,7 @@
 import { Box, Stack, Typography } from "@mui/material"
 import { HEATMAP_PATTERNS, patternSwatchStyle } from "../utils/heatmapPatterns"
 
-// Ordered key for the texture ramp: one swatch per level, weakest → strongest.
+// Ordered key for the texture ramp: one swatch per level, weakest -> strongest.
 export default function PatternLegend({
   label = "-log10(p)",
   swatchWidth = 26,

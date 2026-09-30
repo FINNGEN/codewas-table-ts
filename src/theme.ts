@@ -1,13 +1,13 @@
-// theme.ts — the app's single source of design tokens.
+// theme.ts - the app's single source of design tokens.
 //
 // Palette intent:
-//   primary   muted steel blue — the app's own chrome (headers, links, selection)
-//   pvalue    violet — reserved for significance/p-value readouts ONLY, so purple
+//   primary   muted steel blue - the app's own chrome (headers, links, selection)
+//   pvalue    violet - reserved for significance/p-value readouts ONLY, so purple
 //             always means "this is a p-value" wherever it shows up
 //   cases     muted rose  ┐ deliberately low-chroma so a dense table of them stays
 //   controls  muted sage  ┘ readable; warm/cool split reads as affected/reference
-//   secondary muted amber — the non-standard-concept marker (its only consumer)
-//   success / error / warning / info — left at MUI defaults, because those carry
+//   secondary muted amber - the non-standard-concept marker (its only consumer)
+//   success / error / warning / info - left at MUI defaults, because those carry
 //             real semantics here (clipboard toasts, load errors, alerts)
 import {
   createTheme,
@@ -17,7 +17,7 @@ import {
 } from "@mui/material/styles"
 
 // Custom palette channels. Without this augmentation `theme.palette.cases` is a type
-// error and `sx={{ color: "cases.main" }}` is unchecked — it silently emits the literal
+// error and `sx={{ color: "cases.main" }}` is unchecked - it silently emits the literal
 // string as a CSS color when the token is missing (which is what happened in dark mode).
 declare module "@mui/material/styles" {
   interface Palette {
@@ -43,14 +43,14 @@ declare module "@mui/material/Chip" {
 }
 
 /**
- * Raw hues for drawing surfaces that cannot read the theme — canvas 2D contexts and
+ * Raw hues for drawing surfaces that cannot read the theme - canvas 2D contexts and
  * d3 interpolators, which run outside React. Light-scheme values; anything that *can*
  * reach the theme should use `theme.palette.*` instead so it follows the mode toggle.
  */
 export const dataHues = {
   primary: "#5082A5",
   pvalue: "#9053C6",
-  // Near-white on the pvalue hue — the low end of the heatmap's evidence ramp.
+  // Near-white on the pvalue hue - the low end of the heatmap's evidence ramp.
   pvalueFaint: "#F4EEFA",
   cases: "#5458bc",
   casesDark: "#5458bc",
@@ -60,7 +60,7 @@ export const dataHues = {
 
 // createTheme only runs augmentColor() on the known channels (primary, secondary, error,
 // warning, info, success). Custom channels are passed through verbatim, so cases/controls/
-// pvalue must spell out light/dark/contrastText — supplying `main` alone leaves
+// pvalue must spell out light/dark/contrastText - supplying `main` alone leaves
 // `pvalue.light` undefined at runtime with no type error.
 const lightPalette: PaletteOptions = {
   mode: "light",
@@ -96,7 +96,7 @@ const darkPalette: PaletteOptions = {
  *
  * Both schemes are spelled out under `colorSchemes` rather than as a top-level `palette`:
  * a root `palette` is folded into the *default* scheme only, which left the dark scheme on
- * MUI's stock palette — no `cases`/`controls` at all, and `primary` back to MUI blue.
+ * MUI's stock palette - no `cases`/`controls` at all, and `primary` back to MUI blue.
  * `cssVariables` stays off on purpose: several call sites branch on `theme.palette.mode`
  * (tableColumns, Scatter, DuckDbScatter), and with CSS variables enabled that always
  * reports the default scheme. Enabling it means converting those to theme.applyStyles().
@@ -124,7 +124,7 @@ export const appTheme = createTheme({
   // Global input ergonomics: drop an icon directly inside any Select/MenuItem and it stays
   // aligned in BOTH states. MenuItem is already flex+center by default, so it only needs the
   // icon↔text gap; the CLOSED Select renders the selected value into `.MuiSelect-select`,
-  // which isn't flex by default — so that slot needs the same flex/center/gap.
+  // which isn't flex by default - so that slot needs the same flex/center/gap.
   //
   // Compact sizing lives here too. Every input in the app should be dense by default, which is
   // the theme.components rung of MUI's customization ladder (sx -> styled -> theme -> global)

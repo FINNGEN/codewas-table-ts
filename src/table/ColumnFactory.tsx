@@ -169,7 +169,7 @@ export function makeStatGroup({
 }
 
 // ─── Stat group configs ───────────────────────────────────────────────────────
-// Lives outside the component — no deps on props/state, never triggers re-renders
+// Lives outside the component - no deps on props/state, never triggers re-renders
 
 export const makeInfoColumn = (
   _conceptsById: Record<number, ConceptMetadata>,
@@ -278,7 +278,7 @@ export const makeInfoColumn = (
           )
         },
       },
-      // Hidden — filter only
+      // Hidden - filter only
       {
         id: "conceptName",
         header: "Name",
@@ -330,7 +330,7 @@ export const makeInfoColumn = (
           <Box>
             {row.cell.getValue<ConceptMetadata[]>()?.map((c) => (
               <Typography variant="body2" key={c.conceptId}>
-                {c.conceptId} – {c.conceptName ?? "N/A"}
+                {c.conceptId} - {c.conceptName ?? "N/A"}
               </Typography>
             ))}
           </Box>

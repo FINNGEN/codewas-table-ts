@@ -61,7 +61,7 @@ export function DuckDbFilterBar({
     .map((f) => ({
       id: f.id,
       label: String(table.getColumn(f.id)?.columnDef.header ?? f.id),
-      value: Array.isArray(f.value) ? `${f.value[0]} – ${f.value[1]}` : String(f.value),
+      value: Array.isArray(f.value) ? `${f.value[0]} - ${f.value[1]}` : String(f.value),
       onClear: () => commitColumnFilters(appliedColumnFilters.filter((c) => c.id !== f.id)),
     }))
 

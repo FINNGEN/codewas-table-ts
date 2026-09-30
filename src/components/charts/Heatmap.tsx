@@ -186,7 +186,7 @@ export function Heatmap({ table, metricKey = "pValue" }: HeatmapProps) {
   const colorScale = useMemo(
     () => scaleSequential().domain([1, 0]).interpolator(interpolateRdYlBu),
     [],
-  ) // Red=low(significant) → Blue=high
+  ) // Red=low(significant) -> Blue=high
 
   return (
     <div ref={wrapperRef} style={{ width: canvasSize.width, height: canvasSize.height || 400 }}>

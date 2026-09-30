@@ -18,7 +18,7 @@ export function CustomBarChart({ data }: { data: ConceptRow[] }) {
           xAxis={[
             {
               scaleType: "band",
-              data: data.map((d) => d.conceptName.slice(0, 20) + "…"),
+              data: data.map((d) => d.conceptName.slice(0, 20) + "..."),
               height: 50,
               tickLabelPlacement: "middle",
               tickLabelStyle: { fontSize: 10, fontWeight: "bold" },
