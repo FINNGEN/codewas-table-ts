@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react"
 import { Info } from "@mui/icons-material"
 import { Box, Button, Modal, Stack, Typography } from "@mui/material"
 
-export function ChartAboutDialog({ children }: { children: ReactNode }) {
+export function ChartAboutDialog({ children, title }: { children: ReactNode; title: string }) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -27,7 +27,7 @@ export function ChartAboutDialog({ children }: { children: ReactNode }) {
           }}
         >
           <Typography id="chart-about-title" variant="h6" sx={{ mb: 2 }}>
-            How to read this chart
+            {title}
           </Typography>
           <Stack spacing={1.5} color="text.secondary">
             {children}

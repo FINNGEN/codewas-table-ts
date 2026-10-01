@@ -24,11 +24,11 @@ export function DuckDbCharts({
     <>
       <Grid size={{ xs: 12, sm: 6, md: 3 }}>
         <FormControl fullWidth size={"small"}>
-          <InputLabel id="duckdb-chart-scope-label">Chart Scope</InputLabel>
+          <InputLabel id="duckdb-chart-scope-label">Plot scope</InputLabel>
           <Select
             labelId="duckdb-chart-scope-label"
             value={chartScope}
-            label="Chart Scope"
+            label="Plot scope"
             onChange={(event) => setChartScope(event.target.value as ChartScope)}
           >
             <MenuItem value="filtered">Filtered concepts</MenuItem>
@@ -38,11 +38,11 @@ export function DuckDbCharts({
       </Grid>
       <Grid size={{ xs: 12, sm: 6, md: 3 }}>
         <FormControl fullWidth size={"small"}>
-          <InputLabel id="duckdb-chart-mode-label">Chart Mode</InputLabel>
+          <InputLabel id="duckdb-chart-mode-label">Plot type</InputLabel>
           <Select
             labelId="duckdb-chart-mode-label"
             value={chartMode}
-            label="Chart Mode"
+            label="Plot type"
             onChange={(event) => setChartMode(event.target.value as ChartMode)}
           >
             {/* Icon alignment (open + closed) is handled globally by the theme - see App.tsx. */}

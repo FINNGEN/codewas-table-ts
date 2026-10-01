@@ -37,21 +37,30 @@ type ScatterPoint = { id: string; label: string; x: number | null; y: number | n
 
 function ScatterInfoModal() {
   return (
-    <ChartAboutDialog>
+    <ChartAboutDialog title="Scatter plot">
+      <Typography variant="subtitle2" color="text.primary">Controls</Typography>
       <Typography variant="body2">
-        Each point is a concept result with values for both selected analysis types. <b>Chart
-        scope</b> chooses whether to show filtered or all loaded concepts. <b>X axis</b> and <b>Y
-        axis</b> choose the analyses; <b>Metric</b> applies the same measure to both: -log10(p), raw
-        effect size, or standardized effect. Results missing either value are omitted.
+        <b>Plot scope</b> chooses the concept population, and <b>Plot type</b> switches between
+        Scatter and Heatmap. <b>X axis</b> and <b>Y axis</b> choose the analyses. <b>Metric</b>
+        applies the same measure to both axes: -log10(p), raw effect size, or standardized effect.
+        <b>Regression line</b> toggles a straight-line fit to the displayed points.
       </Typography>
       <Typography variant="body2">
-        Standardized effects help compare analyses, but they remain analysis-specific measures.
-        Hover for the concept and its results; click a point to open its detailed concept view.
+        For example, choose <b>Binary</b> on X, <b>Count</b> on Y, and <b>Standardized effect</b>
+        to find concepts elevated in both analyses (upper right) or showing opposite directions.
+        Choose <b>-log10(p)</b> instead to find concepts with strong evidence in both analyses;
+        position then does not show effect direction.
+      </Typography>
+      <Typography variant="subtitle2" color="text.primary">Reading the plot</Typography>
+      <Typography variant="body2">
+        Each dot is a concept result with values for both axes; results missing either value are
+        omitted. Standardized effects help compare analyses, but they remain analysis-specific
+        measures. Hover to inspect a dot and click it to open the detailed concept view.
       </Typography>
       <Typography variant="body2">
-        The <b>Regression line</b> is a descriptive straight-line fit to the displayed points. Its
-        beta is the slope and R-squared describes fit; neither establishes causation. If more than
-        {" "}3,000 points qualify, the chart shows a limit warning.
+        The regression slope (beta) and R-squared describe the displayed points; they do not
+        establish causation. If more than 3,000 points qualify, a warning indicates that the plot
+        is limited to 3,000.
       </Typography>
     </ChartAboutDialog>
   )
