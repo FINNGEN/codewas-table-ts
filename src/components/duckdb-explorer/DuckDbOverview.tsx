@@ -897,48 +897,76 @@ function DivergingLegend({
 
 function InfoModal({ colorMetric }: { colorMetric: OverviewColorMetric }) {
   return (
-    <ChartAboutDialog>
+    <ChartAboutDialog title="Heatmap plot">
+      <Typography variant="subtitle2" color="text.primary">Controls</Typography>
       <Typography variant="body2">
-        Each column is a concept; each row is an analysis type. <b>Chart scope</b> chooses whether
-        to show filtered or all loaded concepts.
+        <b>Plot scope</b> chooses the concept population. <b>Filtered concepts</b> uses the applied
+        table filters; <b>All concepts</b> ignores those column filters but keeps the other view
+        settings. <b>Plot type</b> switches between Heatmap and Scatter. <b>Concept search</b>
+        narrows the plotted concepts by name, code, or ID.
       </Typography>
       <Typography variant="body2">
-        <b>Parent cell</b> controls what a parent column displays. <b>Concept's own result</b> uses
-        that concept's CodeWAS result; <b>Strongest in subtree</b> uses the strongest result among
-        loaded rows in its subtree. Hover to compare the two and see which concept supplied the
-        subtree result. Opening a concept's detail shows its own result.
+        <b>Color by</b> chooses -log10(p), standardized effect, or row-scaled standardized effect.
+        <b>Parent cell</b> chooses between the concept's own CodeWAS result and the strongest loaded
+        result in its subtree. For example, a broad phenotype may have a modest result even when
+        one specific diagnosis beneath it is strong; switching this control makes that distinction
+        visible.
       </Typography>
+      {colorMetric === "pValue" ? (
+        <Typography variant="body2">
+          <b>Color scale</b> chooses per-analysis or global texture scaling. In Global mode, the
+          slider adjusts the texture thresholds.
+        </Typography>
+      ) : (
+        <Typography variant="body2">
+          <b>Effect scale</b> changes the colors, not the result values. Uncapped uses the full
+          observed range; the percentile options cap the color range symmetrically around zero.
+          If one extreme effect makes most cells look pale, try the 99th-percentile cap. Open the
+          concept detail to see an exact value even when its color is saturated.
+        </Typography>
+      )}
+      <Typography variant="subtitle2" color="text.primary">Reading the plot</Typography>
       <Typography variant="body2">
-        <b>Color by</b> selects -log10(p), standardized effect, or row-scaled standardized effect.
-        For standardized effect, blue is negative and red is positive; categorical effects are
-        unsigned. Row-scaled colors mean below or above that analysis row's mean, not case-control
-        direction.
+        Each column is a concept and each row is an analysis type.
       </Typography>
-      <Typography variant="body2">
-        <b>Effect scale</b> changes colors, not results. Uncapped shows the full observed range; the
-        95th-, 98th-, and 99th-percentile choices limit the color range symmetrically around zero.
-        The legend shows the chosen limit and how many source values exceed it. The default is the
-        99th percentile.
-      </Typography>
-      <Typography variant="body2">
-        Sorting an analysis row orders effect colors by their signed value, positive to negative or
-        the reverse. If there are more columns than fit, the viewer first keeps the largest absolute
-        effects in either direction. P-value sorting uses -log10(p).
-      </Typography>
-      <Typography variant="body2">
-        A tall blue bar under a parent shows its number of direct children and opens them below; a
-        short grey bar marks a leaf that opens the concept detail. The expanded column has an amber
-        outline.
-      </Typography>
+      {colorMetric === "smdRaw" && (
+        <Typography variant="body2">
+          In standardized-effect mode, blue is negative and red is positive; categorical effects
+          are unsigned. For example, a negative <b>Age at First Event</b> effect means the first
+          record occurred earlier in cases, among people with a recorded event.
+        </Typography>
+      )}
+      {colorMetric === "smdRowScaled" && (
+        <Typography variant="body2">
+          Row-scaled colors show whether a value is below or above that analysis row's mean, not
+          case-control direction.
+        </Typography>
+      )}
       {colorMetric === "pValue" && (
         <>
           <Typography variant="body2">
-            In p-value mode, denser texture means stronger evidence. The <b>Global</b> scale's slider
-            adjusts texture thresholds.
+            In p-value mode, denser texture means stronger -log10(p) evidence.
           </Typography>
           <PatternLegend />
         </>
       )}
+      <Typography variant="body2">
+        Hover to compare a parent's own and subtree results and identify the concept supplying the
+        subtree result. Click a parent to open its children, or a leaf to open its detail. The blue
+        bar beneath a parent indicates its number of direct children; the expanded column has an
+        amber outline.
+      </Typography>
+      <Typography variant="body2">
+        {colorMetric === "pValue" ? (
+          <>P-value sorting uses -log10(p).</>
+        ) : (
+          <>
+            Sorting an effect row orders columns by signed value, positive to negative or the
+            reverse. If more columns exist than fit, the plot first retains the largest absolute
+            effects in either direction.
+          </>
+        )}
+      </Typography>
     </ChartAboutDialog>
   )
 }
