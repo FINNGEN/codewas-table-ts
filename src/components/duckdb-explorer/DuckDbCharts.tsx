@@ -3,7 +3,8 @@ import { FormControl, Grid, InputLabel, MenuItem, Select } from "@mui/material"
 import { DuckDbScatter } from "./DuckDbScatter"
 import type { ChartMode, ChartScope, ConceptSummaryRow } from "./types"
 import { DuckDbOverview } from "./DuckDbOverview"
-import { Map, ScatterPlotSharp } from "@mui/icons-material"
+import { DuckDbFindings } from "./DuckDbFindings"
+import { Insights, Map, ScatterPlotSharp } from "@mui/icons-material"
 
 export function DuckDbCharts({
   rows,
@@ -50,6 +51,10 @@ export function DuckDbCharts({
               <Map sx={{ fontSize: 16 }} />
               Heatmap
             </MenuItem>
+            <MenuItem value="findings">
+              <Insights sx={{ fontSize: 16 }} />
+              Findings overview
+            </MenuItem>
             <MenuItem value="scatter">
               <ScatterPlotSharp sx={{ fontSize: 16 }} />
               Scatter
@@ -62,6 +67,13 @@ export function DuckDbCharts({
 
   return chartMode === "scatter" ? (
     <DuckDbScatter
+      rows={rows}
+      chartLoading={chartLoading}
+      onSelectConcept={onSelectConcept}
+      sharedControls={sharedControls}
+    />
+  ) : chartMode === "findings" ? (
+    <DuckDbFindings
       rows={rows}
       chartLoading={chartLoading}
       onSelectConcept={onSelectConcept}
