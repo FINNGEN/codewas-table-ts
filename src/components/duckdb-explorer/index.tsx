@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Alert,
   Box,
+  Chip,
   CircularProgress,
   Divider,
   FormControl,
@@ -76,10 +77,12 @@ function filtersEqual(a: MRT_ColumnFiltersState, b: MRT_ColumnFiltersState): boo
 export default function DuckDbExplorer({
   dataSource,
   pageView,
+  setPageView,
   onConceptStats,
 }: {
   dataSource: DuckDbDataSource
   pageView: PageViewOptions
+  setPageView: (view: PageViewOptions) => void
   onConceptStats?: (stats: { filtered: number; total: number }) => void
 }) {
   const [countMode, setCountMode] = useState("all")
@@ -106,6 +109,10 @@ export default function DuckDbExplorer({
   const [tableLoading, setTableLoading] = useState(false)
   const [hierarchyLoading, setHierarchyLoading] = useState(false)
   const [tableMode, setTableMode] = useState<TableMode>("flat")
+  const [tableConceptSet, setTableConceptSet] = useState<{
+    label: string
+    rowKeys: string[]
+  } | null>(null)
   // Draft column filters drive the MRT inputs; the applied snapshot drives the SQL queries. Edits to
   // the inputs (and Search) are staged until the user applies them, to avoid a query per keystroke.
   const [columnFilters, setColumnFilters] = useState<MRT_ColumnFiltersState>(DEFAULT_COLUMN_FILTERS)
@@ -280,11 +287,34 @@ export default function DuckDbExplorer({
     selectedDomain,
   ])
 
+  // A selected Findings cluster is already a complete, small row-key set and uses client-side
+  // pagination/sorting. Keep those client state changes out of the server-query dependencies;
+  // otherwise MRT pagination updates can repeatedly reload the same cluster and make the table jump.
+  const serverTablePagination = tableConceptSet == null ? pagination : null
+  const serverTableSorting = tableConceptSet == null ? sorting : null
+
   useEffect(() => {
     let active = true
     async function loadTableRows() {
       setTableLoading(true)
       try {
+        if (tableConceptSet) {
+          const rowsRaw = await dataSource.runQuery(
+            buildSummaryRowsByRowKeysQuery(
+              countMode,
+              selectedDomain,
+              appliedSearchText,
+              tableConceptSet.rowKeys,
+              aiFilter,
+            ),
+          )
+          if (!active) return
+          const mappedRows = (rowsRaw as BlockMetricRow[]).map(mapSummaryRow)
+          setTableRows(orderRowsByRowKeys(mappedRows, tableConceptSet.rowKeys))
+          setTableRowCount(mappedRows.length)
+          return
+        }
+        if (!serverTablePagination || !serverTableSorting) return
         const [rowsRaw, countRaw] = await Promise.all([
           dataSource.runQuery(
             buildPagedSummaryQuery(
@@ -292,8 +322,8 @@ export default function DuckDbExplorer({
               selectedDomain,
               appliedSearchText,
               appliedColumnFilters,
-              sorting,
-              pagination,
+              serverTableSorting,
+              serverTablePagination,
               aiFilter,
             ),
           ),
@@ -330,10 +360,11 @@ export default function DuckDbExplorer({
     appliedColumnFilters,
     countMode,
     dataSource,
-    pagination,
     appliedSearchText,
     selectedDomain,
-    sorting,
+    serverTablePagination,
+    serverTableSorting,
+    tableConceptSet,
   ])
 
   // Unfiltered concept total for the current view (countMode/domain/search), so the footer can show
@@ -513,6 +544,19 @@ export default function DuckDbExplorer({
     setPagination((current) => ({ ...current, pageIndex: 0 }))
   }, [aiFilter, appliedColumnFilters, countMode, appliedSearchText, selectedDomain])
 
+  const openConceptSetInTable = useCallback(
+    (selection: { label: string; rowKeys: string[] }) => {
+      setTableRows([])
+      setTableRowCount(selection.rowKeys.length)
+      setTableLoading(true)
+      setTableConceptSet(selection)
+      setTableMode("flat")
+      setPagination((current) => ({ ...current, pageIndex: 0 }))
+      setPageView("table")
+    },
+    [setPageView],
+  )
+
   const columns = useMemo(() => buildColumns(aiAvailable), [aiAvailable])
 
   const table = useMaterialReactTable({
@@ -581,8 +625,8 @@ export default function DuckDbExplorer({
     // snapshot). Client-side filtering would re-hide rows against the unapplied draft filters and
     // break the deferred-apply model in hierarchy mode.
     manualFiltering: true,
-    manualPagination: tableMode === "flat",
-    manualSorting: tableMode === "flat",
+    manualPagination: tableMode === "flat" && tableConceptSet == null,
+    manualSorting: tableMode === "flat" && tableConceptSet == null,
     onColumnFiltersChange: setColumnFilters,
     // Read by NumericFilterBuilder, whose popover has its own Apply button / Enter key.
     meta: { applyFilters },
@@ -604,7 +648,7 @@ export default function DuckDbExplorer({
       columnPinning: { left: ["mrt-row-expand", "conceptInfo", "ancestorConceptIds", "info"] },
       showColumnFilters: false,
     },
-    rowCount: tableMode === "flat" ? tableRowCount : undefined,
+    rowCount: tableMode === "flat" && tableConceptSet == null ? tableRowCount : undefined,
     state: {
       isLoading: tableMode === "hierarchy" ? hierarchyLoading : tableLoading,
       columnFilters,
@@ -665,7 +709,20 @@ export default function DuckDbExplorer({
           overflow: "visible",
         }}
       >
-        <Stack direction="row" spacing={2}>
+        <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
+          {tableConceptSet && (
+            <Chip
+              color="primary"
+              variant="outlined"
+              label={`${tableConceptSet.label} (${tableConceptSet.rowKeys.length})`}
+              onDelete={() => {
+                setTableConceptSet(null)
+                setPagination((current) => ({ ...current, pageIndex: 0 }))
+              }}
+              title="Showing only concepts from the selected Findings overview cluster"
+              sx={{ maxWidth: 360 }}
+            />
+          )}
           <FormControl sx={{ minWidth: 120 }} size="small">
             <InputLabel id="table-mode-label">Table View</InputLabel>
             <Select
@@ -675,6 +732,7 @@ export default function DuckDbExplorer({
               onChange={(event) => {
                 const nextMode = event.target.value as TableMode
                 setTableMode(nextMode)
+                if (nextMode === "hierarchy") setTableConceptSet(null)
                 if (nextMode === "hierarchy" && countMode === "code") {
                   setCountMode("all")
                 }
@@ -853,6 +911,7 @@ export default function DuckDbExplorer({
               chartScope={chartScope}
               setChartScope={setChartScope}
               onSelectConcept={focusRow}
+              onOpenConceptSet={openConceptSetInTable}
             />
           ) : (
             <MaterialReactTable table={table} />

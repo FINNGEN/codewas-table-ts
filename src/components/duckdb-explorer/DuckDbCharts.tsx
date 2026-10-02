@@ -12,12 +12,14 @@ export function DuckDbCharts({
   chartScope,
   setChartScope,
   onSelectConcept,
+  onOpenConceptSet,
 }: {
   rows: ConceptSummaryRow[]
   chartLoading: boolean
   chartScope: ChartScope
   setChartScope: Dispatch<SetStateAction<ChartScope>>
   onSelectConcept: (rowKey: string) => void
+  onOpenConceptSet: (selection: { label: string; rowKeys: string[] }) => void
 }) {
   const [chartMode, setChartMode] = useState<ChartMode>("heatmap")
 
@@ -77,6 +79,7 @@ export function DuckDbCharts({
       rows={rows}
       chartLoading={chartLoading}
       onSelectConcept={onSelectConcept}
+      onOpenConceptSet={onOpenConceptSet}
       sharedControls={sharedControls}
     />
   ) : (

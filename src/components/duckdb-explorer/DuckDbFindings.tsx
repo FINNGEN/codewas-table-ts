@@ -52,7 +52,7 @@ type FindingsNode = {
 }
 
 type DisplayEntry =
-  | { type: "group"; key: string; label: string; count: number }
+  | { type: "group"; key: string; label: string; count: number; rowKeys: string[] }
   | { type: "node"; key: string; node: FindingsNode }
 
 const BLOCK_LABELS: Record<ChartBlockKey, string> = {
@@ -475,8 +475,9 @@ function FindingsAbout() {
         <b>Clusters</b> can request 3, 5, or 8 groups. <b>Automatic</b> compares solutions from 2 through
         8 groups and selects the one with the best average silhouette score, subject to the number of
         displayed concepts. Cluster headings summarize the strongest average components of each
-        profile. The clusters are exploratory descriptions of these results, not validated clinical
-        or biological classes.
+        profile. Click a cluster heading to open its member concepts in the table; remove the cluster
+        chip above the table to return to the ordinary table results. The clusters are exploratory
+        descriptions of these results, not validated clinical or biological classes.
       </Typography>
 
       <Typography variant="subtitle2">Parent results and evidence cutoff</Typography>
@@ -529,11 +530,13 @@ export function DuckDbFindings({
   rows,
   chartLoading,
   onSelectConcept,
+  onOpenConceptSet,
   sharedControls,
 }: {
   rows: ConceptSummaryRow[]
   chartLoading: boolean
   onSelectConcept: (rowKey: string) => void
+  onOpenConceptSet: (selection: { label: string; rowKeys: string[] }) => void
   sharedControls: ReactNode
 }) {
   const [rankMode, setRankMode] = useState<FindingsRankMode>("evidence")
@@ -700,6 +703,7 @@ export function DuckDbFindings({
         key: `cluster-${groupIndex}`,
         label: `Cluster ${groupIndex + 1}: ${clusterProfileLabel(group.indices, vectors)}`,
         count: group.indices.length,
+        rowKeys: group.indices.map((index) => ranked[index].row.rowKey),
       })
       entries.push(...group.indices
         .sort((left, right) => left - right)
@@ -910,7 +914,20 @@ export function DuckDbFindings({
                         <TableCell colSpan={8} sx={{ bgcolor: "action.hover", py: 0.75 }}>
                           <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
                             <Insights fontSize="small" color="primary" />
-                            <Typography variant="subtitle2">{entry.label}</Typography>
+                            <Link
+                              component="button"
+                              type="button"
+                              underline="hover"
+                              variant="subtitle2"
+                              onClick={() => onOpenConceptSet({
+                                label: entry.label,
+                                rowKeys: entry.rowKeys,
+                              })}
+                              title="Open this cluster's concepts in the table"
+                              sx={{ textAlign: "left", fontWeight: 600 }}
+                            >
+                              {entry.label}
+                            </Link>
                             <Typography variant="caption" color="text.secondary">
                               {entry.count.toLocaleString()} concept{entry.count === 1 ? "" : "s"}
                             </Typography>
