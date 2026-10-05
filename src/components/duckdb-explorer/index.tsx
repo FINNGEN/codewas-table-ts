@@ -904,7 +904,15 @@ export default function DuckDbExplorer({
         <Box
           sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "auto" }}
         >
-          {pageView === "charts" ? (
+          {/* Keep both views mounted so plot-specific selections survive a visit to the table. */}
+          <Box
+            sx={{
+              display: pageView === "charts" ? "flex" : "none",
+              flex: 1,
+              minHeight: 0,
+              flexDirection: "column",
+            }}
+          >
             <DuckDbCharts
               rows={chartRows}
               chartLoading={chartLoading}
@@ -913,9 +921,17 @@ export default function DuckDbExplorer({
               onSelectConcept={focusRow}
               onOpenConceptSet={openConceptSetInTable}
             />
-          ) : (
+          </Box>
+          <Box
+            sx={{
+              display: pageView === "table" ? "flex" : "none",
+              flex: 1,
+              minHeight: 0,
+              flexDirection: "column",
+            }}
+          >
             <MaterialReactTable table={table} />
-          )}
+          </Box>
         </Box>
       </Box>
       <ConceptDetailDialog row={selectedDetailRow} onClose={() => setSelectedDetailRow(null)} />

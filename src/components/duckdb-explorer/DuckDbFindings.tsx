@@ -5,6 +5,7 @@ import {
   CircularProgress,
   FormControl,
   Grid,
+  IconButton,
   InputLabel,
   Link,
   MenuItem,
@@ -21,7 +22,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material"
-import { AccountTreeRounded, ChevronRight, Insights } from "@mui/icons-material"
+import { AccountTreeRounded, ChevronRight, ExpandMore, Insights } from "@mui/icons-material"
 import { ChartAboutDialog } from "./ChartAboutDialog"
 import { HEATMAP_BLOCKS } from "./constants"
 import type { ChartBlockKey, ConceptSummaryRow } from "./types"
@@ -52,8 +53,17 @@ type FindingsNode = {
 }
 
 type DisplayEntry =
-  | { type: "group"; key: string; label: string; count: number; rowKeys: string[] }
-  | { type: "node"; key: string; node: FindingsNode }
+  | {
+      type: "group"
+      key: string
+      label: string
+      name: string
+      scope: string
+      summary: string
+      count: number
+      rowKeys: string[]
+    }
+  | { type: "node"; key: string; node: FindingsNode; groupKey?: string }
 
 const BLOCK_LABELS: Record<ChartBlockKey, string> = {
   Binary: "Binary",
@@ -273,26 +283,53 @@ function clusterProfiles(vectors: ProfileVector[], requestedCount: FindingsClust
   return bestGroups
 }
 
-function clusterProfileLabel(group: number[], vectors: ProfileVector[]) {
+function clusterEvidenceLabel(
+  group: number[],
+  nodes: FindingsNode[],
+  mode: ParentResultMode,
+  evidenceCutoff: number,
+) {
   const summaries = HEATMAP_BLOCKS.map((block, analysisIndex) => {
-    const values = group
-      .map((nodeIndex) => vectors[nodeIndex][analysisIndex])
-      .filter((value): value is number => value != null)
-    const average = values.length > 0
-      ? values.reduce((sum, value) => sum + value, 0) / values.length
-      : 0
-    return { block, average, coverage: values.length / Math.max(group.length, 1) }
+    let positive = 0
+    let negative = 0
+    let evidenceTotal = 0
+    for (const nodeIndex of group) {
+      const agg = nodes[nodeIndex].agg
+      const logp = mode === "own" ? agg.ownLogp[analysisIndex] : agg.strongestSmdLogp[analysisIndex]
+      const effect = mode === "own" ? agg.ownSmd[analysisIndex] : agg.strongestSmd[analysisIndex]
+      if (logp == null || effect == null || logp < evidenceCutoff) continue
+      evidenceTotal += logp
+      if (block === "Categorical" || effect >= 0) positive++
+      else negative++
+    }
+    return { block, positive, negative, supported: positive + negative, evidenceTotal }
   })
-    .filter(({ average, coverage }) => Math.abs(average) >= 0.1 && coverage >= 0.25)
-    .sort((left, right) => Math.abs(right.average) - Math.abs(left.average))
-    .slice(0, 3)
+    .filter(({ supported }) => supported > 0)
+    .sort((left, right) =>
+      right.supported - left.supported ||
+      right.evidenceTotal - left.evidenceTotal ||
+      HEATMAP_BLOCKS.indexOf(left.block) - HEATMAP_BLOCKS.indexOf(right.block),
+    )
 
-  if (summaries.length === 0) return "Weak or incomplete cross-analysis profile"
-  return summaries.map(({ block, average }) =>
-    block === "Categorical"
-      ? `${BLOCK_SHORT_LABELS[block]} present`
-      : `${BLOCK_SHORT_LABELS[block]} ${average < 0 ? "negative" : "positive"}`,
-  ).join(" | ")
+  if (summaries.length === 0) return "No members above the evidence cutoff"
+  return summaries.map(({ block, positive, negative, supported }) => {
+    const total = group.length
+    if (block === "Categorical") return `${BLOCK_SHORT_LABELS[block]} (${supported}/${total})`
+    if (positive > 0 && negative > 0) {
+      return `${BLOCK_SHORT_LABELS[block]} mixed (${positive} positive, ${negative} negative of ${total})`
+    }
+    return `${BLOCK_SHORT_LABELS[block]} ${negative > 0 ? "negative" : "positive"} (${supported}/${total})`
+  }).join(" | ")
+}
+
+function stableGroupKey(scope: string, rowKeys: string[]) {
+  const value = `${scope}|${[...rowKeys].sort().join("|")}`
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return `profile-${(hash >>> 0).toString(36)}`
 }
 
 function MiniEffect({
@@ -474,10 +511,16 @@ function FindingsAbout() {
       <Typography variant="body2">
         <b>Clusters</b> can request 3, 5, or 8 groups. <b>Automatic</b> compares solutions from 2 through
         8 groups and selects the one with the best average silhouette score, subject to the number of
-        displayed concepts. Cluster headings summarize the strongest average components of each
-        profile. Click a cluster heading to open its member concepts in the table; remove the cluster
-        chip above the table to return to the ordinary table results. The clusters are exploratory
-        descriptions of these results, not validated clinical or biological classes.
+        displayed concepts. Each hierarchy level is clustered independently, so Profile A at one
+        level is unrelated to Profile A at another level. The heading therefore names the current
+        parent and reports only above-cutoff member evidence, including support counts such as
+        Binary positive (6/6) or Age mixed (3 positive, 2 negative of 6).
+      </Typography>
+      <Typography variant="body2">
+        Use the chevron beside a profile to fold or unfold its member rows. Click the profile text to
+        open its members in the table; remove the profile chip above the table to restore the ordinary
+        table results. These profiles are exploratory descriptions of the displayed results, not
+        validated clinical or biological classes.
       </Typography>
 
       <Typography variant="subtitle2">Parent results and evidence cutoff</Typography>
@@ -548,11 +591,13 @@ export function DuckDbFindings({
   const [maxRows, setMaxRows] = useState(25)
   const [searchText, setSearchText] = useState("")
   const [path, setPath] = useState<string[]>([])
+  const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<string[]>([])
   const [previousRows, setPreviousRows] = useState(rows)
   if (previousRows !== rows) {
     setPreviousRows(rows)
     setPath([])
     setSearchText("")
+    setCollapsedGroupKeys([])
   }
 
   const rowByKey = useMemo(() => new Map(rows.map((row) => [row.rowKey, row] as const)), [rows])
@@ -639,6 +684,10 @@ export function DuckDbFindings({
     [hierarchy, rows],
   )
   const currentParentKey = path.at(-1) ?? null
+  const currentParentRow = currentParentKey ? rowByKey.get(currentParentKey) : null
+  const currentScopeLabel = currentParentRow
+    ? conceptLabel(currentParentRow)
+    : currentParentKey ?? "All roots"
   const currentKeys = useMemo(
     () => currentParentKey
       ? hierarchy.childRowKeysByParentRowKey.get(currentParentKey) ?? []
@@ -684,6 +733,7 @@ export function DuckDbFindings({
         type: "node" as const,
         key: node.row.rowKey,
         node,
+        groupKey: undefined,
       }))
     }
 
@@ -698,19 +748,48 @@ export function DuckDbFindings({
 
     const entries: DisplayEntry[] = []
     groups.forEach((group, groupIndex) => {
+      const rowKeys = group.indices.map((index) => ranked[index].row.rowKey)
+      const name = `Profile ${String.fromCharCode(65 + groupIndex)}`
+      const summary = clusterEvidenceLabel(group.indices, ranked, parentMode, evidenceCutoff)
+      const groupKey = stableGroupKey(currentScopeLabel, rowKeys)
       entries.push({
         type: "group",
-        key: `cluster-${groupIndex}`,
-        label: `Cluster ${groupIndex + 1}: ${clusterProfileLabel(group.indices, vectors)}`,
+        key: groupKey,
+        label: `${name} within ${currentScopeLabel}: ${summary}`,
+        name,
+        scope: currentScopeLabel,
+        summary,
         count: group.indices.length,
-        rowKeys: group.indices.map((index) => ranked[index].row.rowKey),
+        rowKeys,
       })
       entries.push(...group.indices
         .sort((left, right) => left - right)
-        .map((index) => ({ type: "node" as const, key: ranked[index].row.rowKey, node: ranked[index] })))
+        .map((index) => ({
+          type: "node" as const,
+          key: ranked[index].row.rowKey,
+          node: ranked[index],
+          groupKey,
+        })))
     })
     return entries
-  }, [clusterCount, currentNodes, evidenceCutoff, maxRows, organizeMode, parentMode, rankMode])
+  }, [
+    clusterCount,
+    currentNodes,
+    currentScopeLabel,
+    evidenceCutoff,
+    maxRows,
+    organizeMode,
+    parentMode,
+    rankMode,
+  ])
+
+  const clusterGroupKeys = displayEntries
+    .filter((entry): entry is Extract<DisplayEntry, { type: "group" }> => entry.type === "group")
+    .map((entry) => entry.key)
+  const collapsedCurrentGroupKeys = clusterGroupKeys.filter((key) => collapsedGroupKeys.includes(key))
+  const visibleDisplayEntries = displayEntries.filter(
+    (entry) => entry.type === "group" || !entry.groupKey || !collapsedGroupKeys.includes(entry.groupKey),
+  )
 
   function openNode(node: FindingsNode) {
     if (node.childCount > 0) {
@@ -877,10 +956,32 @@ export function DuckDbFindings({
             )
           })}
         </Breadcrumbs>
-        <Typography variant="caption" color="text.secondary">
-          Showing {Math.min(currentNodes.length, maxRows).toLocaleString()} of {currentNodes.length.toLocaleString()}
-          {" at this hierarchy level"} | scale +/-{formatNumber(effectRange, 2)}
-        </Typography>
+        <Stack direction="row" spacing={1.25} sx={{ alignItems: "center" }}>
+          {clusterGroupKeys.length > 0 && collapsedCurrentGroupKeys.length < clusterGroupKeys.length && (
+            <Link
+              component="button"
+              variant="caption"
+              underline="hover"
+              onClick={() => setCollapsedGroupKeys(clusterGroupKeys)}
+            >
+              Collapse all profiles
+            </Link>
+          )}
+          {collapsedCurrentGroupKeys.length > 0 && (
+            <Link
+              component="button"
+              variant="caption"
+              underline="hover"
+              onClick={() => setCollapsedGroupKeys([])}
+            >
+              Expand all profiles
+            </Link>
+          )}
+          <Typography variant="caption" color="text.secondary">
+            Showing {Math.min(currentNodes.length, maxRows).toLocaleString()} of {currentNodes.length.toLocaleString()}
+            {" at this hierarchy level"} | scale +/-{formatNumber(effectRange, 2)}
+          </Typography>
+        </Stack>
       </Stack>
 
       <Paper variant="outlined" sx={{ mx: 1, mb: 1, overflow: "hidden" }}>
@@ -907,30 +1008,50 @@ export function DuckDbFindings({
                 </TableRow>
               </TableHead>
               <TableBody>
-                {displayEntries.map((entry) => {
+                {visibleDisplayEntries.map((entry) => {
                   if (entry.type === "group") {
+                    const collapsed = collapsedGroupKeys.includes(entry.key)
                     return (
                       <TableRow key={entry.key}>
                         <TableCell colSpan={8} sx={{ bgcolor: "action.hover", py: 0.75 }}>
                           <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                            <Insights fontSize="small" color="primary" />
-                            <Link
-                              component="button"
-                              type="button"
-                              underline="hover"
-                              variant="subtitle2"
-                              onClick={() => onOpenConceptSet({
-                                label: entry.label,
-                                rowKeys: entry.rowKeys,
-                              })}
-                              title="Open this cluster's concepts in the table"
-                              sx={{ textAlign: "left", fontWeight: 600 }}
+                            <IconButton
+                              size="small"
+                              aria-label={`${collapsed ? "Expand" : "Collapse"} ${entry.name}`}
+                              onClick={() => setCollapsedGroupKeys((current) =>
+                                current.includes(entry.key)
+                                  ? current.filter((key) => key !== entry.key)
+                                  : [...current, entry.key],
+                              )}
+                              sx={{ p: 0.25 }}
                             >
-                              {entry.label}
-                            </Link>
-                            <Typography variant="caption" color="text.secondary">
-                              {entry.count.toLocaleString()} concept{entry.count === 1 ? "" : "s"}
-                            </Typography>
+                              {collapsed ? <ChevronRight fontSize="small" /> : <ExpandMore fontSize="small" />}
+                            </IconButton>
+                            <Insights fontSize="small" color="primary" />
+                            <Box sx={{ minWidth: 0 }}>
+                              <Stack direction="row" spacing={1} sx={{ alignItems: "baseline", flexWrap: "wrap" }}>
+                                <Link
+                                  component="button"
+                                  type="button"
+                                  underline="hover"
+                                  variant="subtitle2"
+                                  onClick={() => onOpenConceptSet({
+                                    label: entry.label,
+                                    rowKeys: entry.rowKeys,
+                                  })}
+                                  title="Open this profile's concepts in the table"
+                                  sx={{ textAlign: "left", fontWeight: 600 }}
+                                >
+                                  {entry.name}: {entry.summary}
+                                </Link>
+                                <Typography variant="caption" color="text.secondary">
+                                  {entry.count.toLocaleString()} concept{entry.count === 1 ? "" : "s"}
+                                </Typography>
+                              </Stack>
+                              <Typography variant="caption" color="text.secondary">
+                                within {entry.scope}; heading uses the selected evidence cutoff
+                              </Typography>
+                            </Box>
                           </Stack>
                         </TableCell>
                       </TableRow>
