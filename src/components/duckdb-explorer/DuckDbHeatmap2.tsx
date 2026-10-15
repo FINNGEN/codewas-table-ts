@@ -144,15 +144,9 @@ function getHierarchyContext(
     (chartLogP(row, block) ?? 0) >= SIGNIFICANCE_CUTOFF
 
   if (descendants.length === 0) {
-    const significantAncestor = allRows.some(
-      (candidate) =>
-        candidate.countMode === row.countMode &&
-        ancestorIds(row).has(String(candidate.conceptId)) &&
-        (chartLogP(candidate, block) ?? 0) >= SIGNIFICANCE_CUTOFF,
-    )
     return {
-      short: significantAncestor ? "D" : "-",
-      label: significantAncestor ? "Descendant of a significant parent" : "No exported related descendants",
+      short: "-",
+      label: "No exported related descendants",
       significantDescendants: 0,
       relatedDescendants: 0,
     }
