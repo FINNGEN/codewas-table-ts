@@ -26,7 +26,7 @@ import { AccountTreeRounded, ChevronRight, ExpandMore, Insights } from "@mui/ico
 import { ChartAboutDialog } from "./ChartAboutDialog"
 import { HEATMAP_BLOCKS } from "./constants"
 import type { ChartBlockKey, ConceptSummaryRow } from "./types"
-import { getChartMetricValue, getSmdValue } from "./utils/heatmapUtils"
+import { getChartMetricValue, getDisplayedEffectValue, getSmdValue } from "./utils/heatmapUtils"
 import { buildHierarchyIndex } from "./utils/hierarchyUtils"
 
 type FindingsRankMode = "evidence" | "effect" | "breadth"
@@ -355,14 +355,16 @@ function MiniEffect({
 
   const categorical = block === "Categorical"
   const safeEffect = effect ?? 0
+  const displayedEffect = getDisplayedEffectValue(effect, block)
+  const safeDisplayedEffect = displayedEffect ?? 0
   const normalized = categorical
-    ? Math.max(0, Math.min(1, safeEffect / range))
-    : Math.max(-1, Math.min(1, safeEffect / range))
+    ? Math.max(0, Math.min(1, safeDisplayedEffect / range))
+    : Math.max(-1, Math.min(1, safeDisplayedEffect / range))
   const zeroX = categorical ? 12 : 66
   const endX = categorical ? 120 : 120
   const x = categorical ? zeroX + normalized * (endX - zeroX) : zeroX + normalized * 54
-  const saturated = effect != null && Math.abs(effect) > range
-  const color = categorical ? "#7957a8" : safeEffect < 0 ? "#2872d9" : "#d6372c"
+  const saturated = displayedEffect != null && Math.abs(displayedEffect) > range
+  const color = categorical ? "#7957a8" : safeDisplayedEffect < 0 ? "#2872d9" : "#d6372c"
   const valueText = effect == null
     ? "effect -"
     : `${saturated ? (safeEffect < 0 ? "<= " : ">= ") : ""}${formatNumber(effect)}`
@@ -550,9 +552,13 @@ function FindingsAbout() {
       <Typography variant="subtitle2">Reading a result plot</Typography>
       <Typography variant="body2">
         In each analysis cell, the small dot shows the signed standardized effect relative to zero:
-        blue and left mean negative, while red and right mean positive. Categorical Cramer&apos;s V is
-        unsigned, so it is shown as a purple diamond extending right from zero. The text after
-        <b> logp</b> is -log10(p); larger values mean stronger statistical evidence.
+        for Binary, Count, and Continuous results, blue and left mean a negative effect, while red
+        and right mean a positive effect. For Age at First Event and Days to First Event, the display
+        direction is reversed: a negative effect means earlier occurrence and is shown red/right,
+        aligning it with a positive Binary or Count signal. The printed value and tooltip retain the
+        raw signed effect. Categorical Cramer&apos;s V is unsigned, so it is shown as a purple diamond
+        extending right from zero. The text after <b> logp</b> is -log10(p); larger values mean
+        stronger statistical evidence.
       </Typography>
       <Typography variant="body2">
         <b>Effect scale</b> controls how dot positions are scaled across the loaded results. A percentile
@@ -822,7 +828,9 @@ export function DuckDbFindings({
           <FindingsAbout />
         </Grid>
 
-        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+        <Grid size={12}>
+          <Grid container spacing={1}>
+        <Grid size={{ xs: 12, sm: 6, md: 2 }}>
           <FormControl fullWidth size="small">
             <InputLabel id="findings-rank-label">Rank by</InputLabel>
             <Select
@@ -837,7 +845,7 @@ export function DuckDbFindings({
             </Select>
           </FormControl>
         </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 2 }}>
           <FormControl fullWidth size="small">
             <InputLabel id="findings-organize-label">Organize concepts</InputLabel>
             <Select
@@ -852,7 +860,7 @@ export function DuckDbFindings({
           </FormControl>
         </Grid>
         {organizeMode === "clustered" && (
-          <Grid size={{ xs: 6, sm: 3, md: 1.8 }}>
+          <Grid size={{ xs: 12, sm: 6, md: 2 }}>
             <FormControl fullWidth size="small">
               <InputLabel id="findings-clusters-label">Clusters</InputLabel>
               <Select
@@ -869,7 +877,7 @@ export function DuckDbFindings({
             </FormControl>
           </Grid>
         )}
-        <Grid size={{ xs: 6, sm: 3, md: 1.6 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 2 }}>
           <FormControl fullWidth size="small">
             <InputLabel id="findings-show-label">Show</InputLabel>
             <Select
@@ -882,7 +890,7 @@ export function DuckDbFindings({
             </Select>
           </FormControl>
         </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 2 }}>
           <FormControl fullWidth size="small">
             <InputLabel id="findings-parent-label">Parent result</InputLabel>
             <Select
@@ -896,7 +904,7 @@ export function DuckDbFindings({
             </Select>
           </FormControl>
         </Grid>
-        <Grid size={{ xs: 6, sm: 3, md: 1.8 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 2 }}>
           <FormControl fullWidth size="small">
             <InputLabel id="findings-cutoff-label">Evidence cutoff</InputLabel>
             <Select
@@ -912,7 +920,7 @@ export function DuckDbFindings({
             </Select>
           </FormControl>
         </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 2 }}>
           <FormControl fullWidth size="small">
             <InputLabel id="findings-scale-label">Effect scale</InputLabel>
             <Select
@@ -927,6 +935,8 @@ export function DuckDbFindings({
               <MenuItem value="p99">Cap at 99th percentile</MenuItem>
             </Select>
           </FormControl>
+        </Grid>
+          </Grid>
         </Grid>
       </Grid>
 

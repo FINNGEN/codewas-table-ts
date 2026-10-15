@@ -1,13 +1,15 @@
 import { useState, type Dispatch, type SetStateAction } from "react"
 import { FormControl, Grid, InputLabel, MenuItem, Select } from "@mui/material"
 import { DuckDbScatter } from "./DuckDbScatter"
-import type { ChartMode, ChartScope, ConceptSummaryRow } from "./types"
+import type { ChartMode, ChartScope, ConceptSummaryRow, HierarchySummaryRow } from "./types"
 import { DuckDbOverview } from "./DuckDbOverview"
 import { DuckDbFindings } from "./DuckDbFindings"
-import { Insights, Map, ScatterPlotSharp } from "@mui/icons-material"
+import { DuckDbHeatmap2 } from "./DuckDbHeatmap2"
+import { GridOn, Insights, Map, ScatterPlotSharp } from "@mui/icons-material"
 
 export function DuckDbCharts({
   rows,
+  hierarchySummaryRows,
   chartLoading,
   chartScope,
   setChartScope,
@@ -15,13 +17,14 @@ export function DuckDbCharts({
   onOpenConceptSet,
 }: {
   rows: ConceptSummaryRow[]
+  hierarchySummaryRows: HierarchySummaryRow[]
   chartLoading: boolean
   chartScope: ChartScope
   setChartScope: Dispatch<SetStateAction<ChartScope>>
   onSelectConcept: (rowKey: string) => void
   onOpenConceptSet: (selection: { label: string; rowKeys: string[] }) => void
 }) {
-  const [chartMode, setChartMode] = useState<ChartMode>("heatmap")
+  const [chartMode, setChartMode] = useState<ChartMode>("heatmap2")
 
   const sharedControls = (
     <>
@@ -49,9 +52,13 @@ export function DuckDbCharts({
             onChange={(event) => setChartMode(event.target.value as ChartMode)}
           >
             {/* Icon alignment (open + closed) is handled globally by the theme - see App.tsx. */}
+            <MenuItem value="heatmap2">
+              <GridOn sx={{ fontSize: 16 }} />
+              Heatmap
+            </MenuItem>
             <MenuItem value="heatmap">
               <Map sx={{ fontSize: 16 }} />
-              Heatmap
+              Hierarchy heatmap
             </MenuItem>
             <MenuItem value="findings">
               <Insights sx={{ fontSize: 16 }} />
@@ -67,7 +74,15 @@ export function DuckDbCharts({
     </>
   )
 
-  return chartMode === "scatter" ? (
+  return chartMode === "heatmap2" ? (
+    <DuckDbHeatmap2
+      rows={rows}
+      hierarchySummaryRows={hierarchySummaryRows}
+      chartLoading={chartLoading}
+      onSelectConcept={onSelectConcept}
+      sharedControls={sharedControls}
+    />
+  ) : chartMode === "scatter" ? (
     <DuckDbScatter
       rows={rows}
       chartLoading={chartLoading}

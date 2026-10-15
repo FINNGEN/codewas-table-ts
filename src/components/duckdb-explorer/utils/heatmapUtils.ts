@@ -52,6 +52,14 @@ export function getChartMetricValue(
   return negLog10(row[`${prefix}PValue` as keyof ConceptSummaryRow] as number | null)
 }
 
+// For timing analyses, a negative effect means an earlier event. Reverse only the displayed
+// signed effect so earlier timing aligns visually with positive Binary/Count signals. The raw
+// result remains unchanged in the row data and detail views.
+export function getDisplayedEffectValue(value: number | null, block: ChartBlockKey) {
+  if (value == null) return null
+  return block === "Age" || block === "Days" ? -value : value
+}
+
 export function getBestHeatmapScore(row: ConceptSummaryRow) {
   return Math.max(
     ...HEATMAP_BLOCKS.map((block) => {

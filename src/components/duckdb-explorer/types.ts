@@ -22,12 +22,14 @@ export type ConceptSummaryRow = {
   binaryTotalCases?: number | null
   binaryTotalControls?: number | null
   binaryPValue?: number | null
+  binaryLogP?: number | null
   binaryEffectSize?: number | null
   binarySmd?: number | null
   binaryTestName?: string | null
   categoricalCaseYes?: number | null
   categoricalControlYes?: number | null
   categoricalPValue?: number | null
+  categoricalLogP?: number | null
   categoricalEffectSize?: number | null
   categoricalSmd?: number | null
   categoricalTestName?: string | null
@@ -49,6 +51,7 @@ export type ConceptSummaryRow = {
   countsP75Control?: number | null
   countsP90Control?: number | null
   countsPValue?: number | null
+  countsLogP?: number | null
   countsEffectSize?: number | null
   countsSmd?: number | null
   countsTestName?: string | null
@@ -69,6 +72,7 @@ export type ConceptSummaryRow = {
   ageP75Control?: number | null
   ageP90Control?: number | null
   agePValue?: number | null
+  ageLogP?: number | null
   ageEffectSize?: number | null
   ageSmd?: number | null
   ageTestName?: string | null
@@ -89,6 +93,7 @@ export type ConceptSummaryRow = {
   daysP75Control?: number | null
   daysP90Control?: number | null
   daysPValue?: number | null
+  daysLogP?: number | null
   daysEffectSize?: number | null
   daysSmd?: number | null
   daysTestName?: string | null
@@ -109,6 +114,7 @@ export type ConceptSummaryRow = {
   continuousP75Control?: number | null
   continuousP90Control?: number | null
   continuousPValue?: number | null
+  continuousLogP?: number | null
   continuousEffectSize?: number | null
   continuousSmd?: number | null
   continuousTestName?: string | null
@@ -118,6 +124,26 @@ export type ConceptSummaryRow = {
   aiCategory?: string | null
   aiRationale?: string | null
   subRows?: ConceptSummaryRow[]
+}
+
+// Optional hierarchy classifications exported by newer CodeWAS files. Older files do not have
+// this table; the charts fall back to deriving the same context from exported concept rows.
+export type HierarchySummaryRow = {
+  parentConceptId: number
+  parentName: string | null
+  parentSourceCode: string | null
+  countMode: string
+  analysisType: string
+  parentLogP: number | null
+  parentSignificant: boolean | null
+  nRelatedDescendants: number | null
+  nSignificantDescendants: number | null
+  nPositiveDescendants: number | null
+  nNegativeDescendants: number | null
+  strongestDescendantId: number | null
+  strongestDescendantName: string | null
+  strongestDescendantLogP: number | null
+  hierarchyPattern: string | null
 }
 
 // The AI category selection, as the query builders need it. `enabled` is separate from `category`
@@ -151,7 +177,7 @@ export type CohortInfoIndex = Record<number, CohortInfoRow>
 export type BlockMetricRow = Record<string, unknown>
 export type ChartBlockKey = "Binary" | "Count" | "Age" | "Days" | "Continuous" | "Categorical"
 export type ChartMetricKey = "-log10" | "effectSize" | "standardizedEffect"
-export type ChartMode = "heatmap" | "findings" | "scatter"
+export type ChartMode = "heatmap" | "heatmap2" | "findings" | "scatter"
 export type ChartScope = "filtered" | "all"
 export type TableMode = "flat" | "hierarchy"
 export type HeatmapOrderMode = "strongest" | "selectedBlock" | "repeatEvidence" | "clustered"

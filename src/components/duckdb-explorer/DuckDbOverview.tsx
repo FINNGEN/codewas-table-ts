@@ -33,6 +33,7 @@ import {
   computeHeatmapDerived,
   divergingColor,
   getHeatmapHeaderLines,
+  getDisplayedEffectValue,
   matchesHeatmapSearch,
 } from "./utils/heatmapUtils"
 import {
@@ -786,7 +787,7 @@ function OverviewLevel({
             {", subtree best "}{shownValue(hoveredSubtreeLogp)}
             {hoveredLogpSource && <>{" from "}<strong>{hoveredLogpSource}</strong></>}
             {colorMetric !== "pValue" && <>
-              {" | "}{COLOR_METRIC_LABEL[colorMetric]}{": own "}{shownValue(hoveredOwnColor)}
+              {" | "}{COLOR_METRIC_LABEL[colorMetric]}{" displayed: own "}{shownValue(hoveredOwnColor)}
               {", subtree strongest "}{shownValue(hoveredSubtreeColor)}
               {hoveredColorSource && <>{" from "}<strong>{hoveredColorSource}</strong></>}
             </>}
@@ -897,12 +898,19 @@ function DivergingLegend({
 
 function InfoModal({ colorMetric }: { colorMetric: OverviewColorMetric }) {
   return (
-    <ChartAboutDialog title="Heatmap plot">
+    <ChartAboutDialog title="Hierarchy heatmap">
+      <Typography variant="subtitle2" color="text.primary">What this plot shows</Typography>
+      <Typography variant="body2">
+        Hierarchy heatmap shows one column per concept and one row per CodeWAS analysis type. It is
+        designed for exploring parent concepts and their descendants: parents can be opened to
+        reveal their children, and the parent cell can show either the concept&apos;s own result or
+        the strongest result found in its subtree.
+      </Typography>
       <Typography variant="subtitle2" color="text.primary">Controls</Typography>
       <Typography variant="body2">
         <b>Plot scope</b> chooses the concept population. <b>Filtered concepts</b> uses the applied
         table filters; <b>All concepts</b> ignores those column filters but keeps the other view
-        settings. <b>Plot type</b> switches between Heatmap and Scatter. <b>Concept search</b>
+        settings. <b>Plot type</b> switches between Hierarchy heatmap, Heatmap, and Scatter. <b>Concept search</b>
         narrows the plotted concepts by name, code, or ID.
       </Typography>
       <Typography variant="body2">
@@ -931,15 +939,18 @@ function InfoModal({ colorMetric }: { colorMetric: OverviewColorMetric }) {
       </Typography>
       {colorMetric === "smdRaw" && (
         <Typography variant="body2">
-          In standardized-effect mode, blue is negative and red is positive; categorical effects
-          are unsigned. For example, a negative <b>Age at First Event</b> effect means the first
-          record occurred earlier in cases, among people with a recorded event.
+          In standardized-effect mode, Binary and Count colors use the usual direction: blue is
+          negative and red is positive. For Age at First Event and Days to First Event, the display
+          direction is reversed so that a negative effect (earlier occurrence in cases) is shown in
+          the same positive-color direction. Categorical effects are unsigned. Raw signed values
+          remain available in the hover details and concept dialog.
         </Typography>
       )}
       {colorMetric === "smdRowScaled" && (
         <Typography variant="body2">
-          Row-scaled colors show whether a value is below or above that analysis row's mean, not
-          case-control direction.
+          Row-scaled colors show whether a value is below or above that analysis row's mean. For
+          timing analyses, the display direction is reversed so earlier occurrence is aligned with
+          the positive-color direction; this does not change the underlying result.
         </Typography>
       )}
       {colorMetric === "pValue" && (
@@ -1058,9 +1069,13 @@ export function DuckDbOverview({
       const ownColor: (number | null)[] = HEATMAP_BLOCKS.map((_, b) => {
         const smd = derived?.smd[b] ?? null
         if (smd == null || colorMetric === "pValue") return null
-        if (colorMetric === "smdRaw") return smd
-        const { mean, sd } = smdRowStats[b]
-        return sd > 0 ? (smd - mean) / sd : 0
+        const effect = colorMetric === "smdRaw"
+          ? smd
+          : (() => {
+              const { mean, sd } = smdRowStats[b]
+              return sd > 0 ? (smd - mean) / sd : 0
+            })()
+        return getDisplayedEffectValue(effect, HEATMAP_BLOCKS[b])
       })
       const color = [...ownColor]
       const colorSource = ownColor.map((value) => value == null ? null : sourceLabel)

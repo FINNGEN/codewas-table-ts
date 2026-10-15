@@ -9,7 +9,9 @@ import { AI_CATEGORY_ALL, AI_CATEGORY_ANY } from "./constants"
 import type { ConceptSummaryRow } from "./types"
 
 const STORAGE_KEY = "duckdb-filter-presets"
-const DEFAULT_COUNT_MODE = "descendant"
+// Exact-code results are the default view across the table and all plots. Users can switch to
+// all descendants or all modes explicitly when needed.
+const DEFAULT_COUNT_MODE = "code"
 const DEFAULT_DOMAIN = "all"
 
 // Synthetic ids for the non-column filter dimensions, so they can be toggled

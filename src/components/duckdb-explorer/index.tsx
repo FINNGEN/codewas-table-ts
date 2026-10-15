@@ -50,7 +50,13 @@ import {
   buildSummaryCountQuery,
   buildSummaryRowsByRowKeysQuery,
 } from "./queryBuilders"
-import { mapCohortInfoRow, mapHeatmapRow, mapHierarchyMetaRow, mapSummaryRow } from "./rowMappers"
+import {
+  mapCohortInfoRow,
+  mapHeatmapRow,
+  mapHierarchyMetaRow,
+  mapHierarchySummaryRow,
+  mapSummaryRow,
+} from "./rowMappers"
 import { buildColumns } from "./tableColumns"
 import type {
   AiFilter,
@@ -59,6 +65,7 @@ import type {
   CohortInfoIndex,
   ConceptSummaryRow,
   HierarchyIndex,
+  HierarchySummaryRow,
   TableMode,
 } from "./types"
 import DownloadMenu from "./DownloadMenu"
@@ -85,7 +92,9 @@ export default function DuckDbExplorer({
   setPageView: (view: PageViewOptions) => void
   onConceptStats?: (stats: { filtered: number; total: number }) => void
 }) {
-  const [countMode, setCountMode] = useState("all")
+  // Keep the main table and every plot focused on exact-code results by default. The user can
+  // explicitly switch to all descendants or all count modes from the shared filter control.
+  const [countMode, setCountMode] = useState("code")
   const [selectedDomain, setSelectedDomain] = useState("all")
   const [searchText, setSearchText] = useState("")
   const [domains, setDomains] = useState<string[]>([])
@@ -93,6 +102,7 @@ export default function DuckDbExplorer({
   const [selectedAiCategory, setSelectedAiCategory] = useState(AI_CATEGORY_ALL)
   const [cohortsInfo, setCohortsInfo] = useState<CohortInfoIndex>({})
   const [chartRows, setChartRows] = useState<ConceptSummaryRow[]>([])
+  const [hierarchySummaryRows, setHierarchySummaryRows] = useState<HierarchySummaryRow[]>([])
   const [tableRows, setTableRows] = useState<ConceptSummaryRow[]>([])
   const [tableRowCount, setTableRowCount] = useState(0)
   const [totalRowCount, setTotalRowCount] = useState(0)
@@ -245,6 +255,56 @@ export default function DuckDbExplorer({
       active = false
     }
   }, [aiAvailable, dataSource])
+
+  // New CodeWAS exports contain precomputed hierarchy classifications. Keep this optional so old
+  // DuckDB files remain usable; Heatmap 2 falls back to the exported concept rows when absent.
+  useEffect(() => {
+    let active = true
+    const hasHierarchySummary = dataSource.tableCounts.some(
+      (table) => table.tableName === "hierarchySummary",
+    )
+    if (!hasHierarchySummary) {
+      setHierarchySummaryRows([])
+      return () => {
+        active = false
+      }
+    }
+
+    dataSource
+      .runQuery(
+        `
+          SELECT
+            parentConceptId,
+            parentName,
+            parentSourceCode,
+            countMode,
+            analysisType,
+            parentLogP,
+            parentSignificant,
+            nRelatedDescendants,
+            nSignificantDescendants,
+            nPositiveDescendants,
+            nNegativeDescendants,
+            strongestDescendantId,
+            strongestDescendantName,
+            strongestDescendantLogP,
+            hierarchyPattern
+          FROM hierarchySummary
+        `,
+      )
+      .then((rows) => {
+        if (active) setHierarchySummaryRows(rows.map(mapHierarchySummaryRow))
+      })
+      .catch(() => {
+        // Keep the client-side fallback if an old or partially written file advertises the table
+        // but cannot be queried.
+        if (active) setHierarchySummaryRows([])
+      })
+
+    return () => {
+      active = false
+    }
+  }, [dataSource])
 
   useEffect(() => {
     let active = true
@@ -915,6 +975,7 @@ export default function DuckDbExplorer({
           >
             <DuckDbCharts
               rows={chartRows}
+              hierarchySummaryRows={hierarchySummaryRows}
               chartLoading={chartLoading}
               chartScope={chartScope}
               setChartScope={setChartScope}

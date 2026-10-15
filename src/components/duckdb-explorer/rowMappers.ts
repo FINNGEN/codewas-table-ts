@@ -1,4 +1,10 @@
-import type { BlockMetricRow, CohortInfoRow, ConceptSummaryRow, HierarchyMetaRow } from "./types"
+import type {
+  BlockMetricRow,
+  CohortInfoRow,
+  ConceptSummaryRow,
+  HierarchyMetaRow,
+  HierarchySummaryRow,
+} from "./types"
 
 export function mapCohortInfoRow(row: BlockMetricRow): CohortInfoRow {
   return {
@@ -29,6 +35,7 @@ export function mapSummaryRow(row: BlockMetricRow): ConceptSummaryRow {
     binaryTotalCases: (row.binaryTotalCases as number | null) ?? null,
     binaryTotalControls: (row.binaryTotalControls as number | null) ?? null,
     binaryPValue: (row.binaryPValue as number | null) ?? null,
+    binaryLogP: (row.binaryLogP as number | null) ?? null,
     binaryEffectSize: (row.binaryEffectSize as number | null) ?? null,
     binarySmd: (row.binarySmd as number | null) ?? null,
     binaryTestName: (row.binaryTestName as string | null) ?? null,
@@ -56,6 +63,7 @@ export function mapSummaryRow(row: BlockMetricRow): ConceptSummaryRow {
     countsP75Control: (row.countsP75Control as number | null) ?? null,
     countsP90Control: (row.countsP90Control as number | null) ?? null,
     countsPValue: (row.countsPValue as number | null) ?? null,
+    countsLogP: (row.countsLogP as number | null) ?? null,
     countsEffectSize: (row.countsEffectSize as number | null) ?? null,
     countsSmd: (row.countsSmd as number | null) ?? null,
     countsTestName: (row.countsTestName as string | null) ?? null,
@@ -76,6 +84,7 @@ export function mapSummaryRow(row: BlockMetricRow): ConceptSummaryRow {
     ageP75Control: (row.ageP75Control as number | null) ?? null,
     ageP90Control: (row.ageP90Control as number | null) ?? null,
     agePValue: (row.agePValue as number | null) ?? null,
+    ageLogP: (row.ageLogP as number | null) ?? null,
     ageEffectSize: (row.ageEffectSize as number | null) ?? null,
     ageSmd: (row.ageSmd as number | null) ?? null,
     ageTestName: (row.ageTestName as string | null) ?? null,
@@ -96,6 +105,7 @@ export function mapSummaryRow(row: BlockMetricRow): ConceptSummaryRow {
     daysP75Control: (row.daysP75Control as number | null) ?? null,
     daysP90Control: (row.daysP90Control as number | null) ?? null,
     daysPValue: (row.daysPValue as number | null) ?? null,
+    daysLogP: (row.daysLogP as number | null) ?? null,
     daysEffectSize: (row.daysEffectSize as number | null) ?? null,
     daysSmd: (row.daysSmd as number | null) ?? null,
     daysTestName: (row.daysTestName as string | null) ?? null,
@@ -116,6 +126,7 @@ export function mapSummaryRow(row: BlockMetricRow): ConceptSummaryRow {
     continuousP75Control: (row.continuousP75Control as number | null) ?? null,
     continuousP90Control: (row.continuousP90Control as number | null) ?? null,
     continuousPValue: (row.continuousPValue as number | null) ?? null,
+    continuousLogP: (row.continuousLogP as number | null) ?? null,
     continuousEffectSize: (row.continuousEffectSize as number | null) ?? null,
     continuousSmd: (row.continuousSmd as number | null) ?? null,
     continuousTestName: (row.continuousTestName as string | null) ?? null,
@@ -124,6 +135,41 @@ export function mapSummaryRow(row: BlockMetricRow): ConceptSummaryRow {
     // "no AI tables" and "concept the AI never scored".
     aiCategory: (row.aiCategory as string | null) ?? null,
     aiRationale: (row.aiRationale as string | null) ?? null,
+  }
+}
+
+function nullableNumber(value: unknown): number | null {
+  if (value == null || value === "") return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+function nullableBoolean(value: unknown): boolean | null {
+  if (value == null) return null
+  if (typeof value === "boolean") return value
+  if (String(value).toLowerCase() === "true") return true
+  if (String(value).toLowerCase() === "false") return false
+  return null
+}
+
+export function mapHierarchySummaryRow(row: BlockMetricRow): HierarchySummaryRow {
+  return {
+    parentConceptId: Number(row.parentConceptId),
+    parentName: row.parentName == null ? null : String(row.parentName),
+    parentSourceCode: row.parentSourceCode == null ? null : String(row.parentSourceCode),
+    countMode: String(row.countMode ?? ""),
+    analysisType: String(row.analysisType ?? ""),
+    parentLogP: nullableNumber(row.parentLogP),
+    parentSignificant: nullableBoolean(row.parentSignificant),
+    nRelatedDescendants: nullableNumber(row.nRelatedDescendants),
+    nSignificantDescendants: nullableNumber(row.nSignificantDescendants),
+    nPositiveDescendants: nullableNumber(row.nPositiveDescendants),
+    nNegativeDescendants: nullableNumber(row.nNegativeDescendants),
+    strongestDescendantId: nullableNumber(row.strongestDescendantId),
+    strongestDescendantName:
+      row.strongestDescendantName == null ? null : String(row.strongestDescendantName),
+    strongestDescendantLogP: nullableNumber(row.strongestDescendantLogP),
+    hierarchyPattern: row.hierarchyPattern == null ? null : String(row.hierarchyPattern),
   }
 }
 
@@ -143,21 +189,27 @@ export function mapHeatmapRow(row: BlockMetricRow): ConceptSummaryRow {
     countMode: String(row.countMode),
     bestPValue: (row.bestPValue as number | null) ?? null,
     binaryPValue: (row.binaryPValue as number | null) ?? null,
+    binaryLogP: (row.binaryLogP as number | null) ?? null,
     binaryEffectSize: (row.binaryEffectSize as number | null) ?? null,
     binarySmd: (row.binarySmd as number | null) ?? null,
     countsPValue: (row.countsPValue as number | null) ?? null,
+    countsLogP: (row.countsLogP as number | null) ?? null,
     countsEffectSize: (row.countsEffectSize as number | null) ?? null,
     countsSmd: (row.countsSmd as number | null) ?? null,
     agePValue: (row.agePValue as number | null) ?? null,
+    ageLogP: (row.ageLogP as number | null) ?? null,
     ageEffectSize: (row.ageEffectSize as number | null) ?? null,
     ageSmd: (row.ageSmd as number | null) ?? null,
     daysPValue: (row.daysPValue as number | null) ?? null,
+    daysLogP: (row.daysLogP as number | null) ?? null,
     daysEffectSize: (row.daysEffectSize as number | null) ?? null,
     daysSmd: (row.daysSmd as number | null) ?? null,
     continuousPValue: (row.continuousPValue as number | null) ?? null,
+    continuousLogP: (row.continuousLogP as number | null) ?? null,
     continuousEffectSize: (row.continuousEffectSize as number | null) ?? null,
     continuousSmd: (row.continuousSmd as number | null) ?? null,
     categoricalPValue: (row.categoricalPValue as number | null) ?? null,
+    categoricalLogP: (row.categoricalLogP as number | null) ?? null,
     categoricalEffectSize: (row.categoricalEffectSize as number | null) ?? null,
     categoricalSmd: (row.categoricalSmd as number | null) ?? null,
   }
