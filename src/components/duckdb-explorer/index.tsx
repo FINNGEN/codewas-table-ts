@@ -260,6 +260,14 @@ export default function DuckDbExplorer({
   // DuckDB files remain usable; Heatmap 2 falls back to the exported concept rows when absent.
   useEffect(() => {
     let active = true
+    // Hierarchy summaries are only consumed by chart views. Loading a potentially large optional
+    // table while the user is browsing the paged results table competes with normal filtering.
+    if (pageView !== "charts") {
+      setHierarchySummaryRows([])
+      return () => {
+        active = false
+      }
+    }
     const hasHierarchySummary = dataSource.tableCounts.some(
       (table) => table.tableName === "hierarchySummary",
     )
@@ -304,10 +312,19 @@ export default function DuckDbExplorer({
     return () => {
       active = false
     }
-  }, [dataSource])
+  }, [dataSource, pageView])
 
   useEffect(() => {
     let active = true
+    // A chart query can return tens of thousands of concepts. Do not run it in the background
+    // while the user is working in the paged table, where it is neither visible nor useful.
+    if (pageView !== "charts") {
+      setChartRows([])
+      setChartLoading(false)
+      return () => {
+        active = false
+      }
+    }
     async function loadChartRows() {
       setChartLoading(true)
       setSummaryError(null)
@@ -344,6 +361,7 @@ export default function DuckDbExplorer({
     countMode,
     dataSource,
     appliedSearchText,
+    pageView,
     selectedDomain,
   ])
 
@@ -964,25 +982,19 @@ export default function DuckDbExplorer({
         <Box
           sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "auto" }}
         >
-          {/* Keep both views mounted so plot-specific selections survive a visit to the table. */}
-          <Box
-            sx={{
-              display: pageView === "charts" ? "flex" : "none",
-              flex: 1,
-              minHeight: 0,
-              flexDirection: "column",
-            }}
-          >
-            <DuckDbCharts
-              rows={chartRows}
-              hierarchySummaryRows={hierarchySummaryRows}
-              chartLoading={chartLoading}
-              chartScope={chartScope}
-              setChartScope={setChartScope}
-              onSelectConcept={focusRow}
-              onOpenConceptSet={openConceptSetInTable}
-            />
-          </Box>
+          {pageView === "charts" && (
+            <Box sx={{ display: "flex", flex: 1, minHeight: 0, flexDirection: "column" }}>
+              <DuckDbCharts
+                rows={chartRows}
+                hierarchySummaryRows={hierarchySummaryRows}
+                chartLoading={chartLoading}
+                chartScope={chartScope}
+                setChartScope={setChartScope}
+                onSelectConcept={focusRow}
+                onOpenConceptSet={openConceptSetInTable}
+              />
+            </Box>
+          )}
           <Box
             sx={{
               display: pageView === "table" ? "flex" : "none",

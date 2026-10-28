@@ -48,6 +48,9 @@ import type {
 import { ChartAboutDialog } from "./ChartAboutDialog"
 
 const SIGNIFICANCE_CUTOFF = 5
+// The detailed heatmap is an HTML table rather than a virtualized canvas. Keeping its rendered
+// rows bounded prevents a broad chart query from creating hundreds of thousands of DOM nodes.
+const HEATMAP_RENDER_ROW_LIMIT = 2000
 
 const METRIC_LABELS: Record<ChartMetricKey, string> = {
   "-log10": "−log10(p)",
@@ -115,6 +118,10 @@ function ancestorIds(row: ConceptSummaryRow) {
       .map((value) => value.trim())
       .filter(Boolean),
   )
+}
+
+function hierarchyContextKey(row: ConceptSummaryRow, block: ChartBlockKey) {
+  return `${row.countMode}|${row.conceptId}|${hierarchyAnalysisType(block)}`
 }
 
 function effectDirection(row: ConceptSummaryRow, block: ChartBlockKey) {
@@ -204,6 +211,39 @@ function getHierarchyContext(
   }
 }
 
+function getHierarchyContextFromDescendants(
+  row: ConceptSummaryRow,
+  block: ChartBlockKey,
+  descendants: ConceptSummaryRow[],
+): HierarchyContext {
+  const significantDescendants = descendants.filter(
+    (candidate) => (chartLogP(candidate, block) ?? 0) >= SIGNIFICANCE_CUTOFF,
+  )
+  const parentSignificant = (chartLogP(row, block) ?? 0) >= SIGNIFICANCE_CUTOFF
+
+  if (descendants.length === 0) {
+    return { short: "-", label: "No exported related descendants", significantDescendants: 0, relatedDescendants: 0 }
+  }
+  if (parentSignificant && significantDescendants.length === 0) {
+    return { short: "P", label: "Parent signal without significant related descendants", significantDescendants: 0, relatedDescendants: descendants.length }
+  }
+  if (!parentSignificant && significantDescendants.length > 0) {
+    return { short: "D", label: "Descendant signal without significant parent", significantDescendants: significantDescendants.length, relatedDescendants: descendants.length }
+  }
+  if (!parentSignificant) {
+    return { short: "N", label: "Neither parent nor related descendants significant", significantDescendants: 0, relatedDescendants: descendants.length }
+  }
+  if (significantDescendants.length === 1) {
+    return { short: "1", label: "One significant related descendant", significantDescendants: 1, relatedDescendants: descendants.length }
+  }
+  const directions = new Set(
+    significantDescendants.map((candidate) => effectDirection(candidate, block)).filter(Boolean),
+  )
+  return directions.has("positive") && directions.has("negative")
+    ? { short: "M", label: "Mixed significant descendant directions", significantDescendants: significantDescendants.length, relatedDescendants: descendants.length }
+    : { short: "C", label: "Coherent significant related descendants", significantDescendants: significantDescendants.length, relatedDescendants: descendants.length }
+}
+
 function hierarchyAnalysisType(block: ChartBlockKey) {
   if (block === "Count") return "Counts"
   if (block === "Age") return "AgeFirstEvent"
@@ -224,19 +264,12 @@ function findStoredHierarchySummary(
   )
 }
 
-function storedHierarchyContext(
-  row: ConceptSummaryRow,
-  block: ChartBlockKey,
-  hierarchySummaryRows: HierarchySummaryRow[],
-): HierarchyContext | null {
-  const summary = findStoredHierarchySummary(row, block, hierarchySummaryRows)
+function hierarchyContextFromSummary(summary: HierarchySummaryRow | undefined): HierarchyContext | null {
   if (!summary || !summary.hierarchyPattern) return null
-
   const pattern = summary.hierarchyPattern
   let short = "N"
   let label = pattern
-  if (pattern === "parent signal without significant descendants" ||
-      pattern === "parent association without significant descendants") {
+  if (pattern === "parent signal without significant descendants" || pattern === "parent association without significant descendants") {
     short = "P"
     label = "Parent signal without significant related descendants"
   } else if (pattern === "coherent parent/descendants") {
@@ -245,12 +278,10 @@ function storedHierarchyContext(
   } else if (pattern === "mixed/confusing descendants") {
     short = "M"
     label = "Mixed significant descendant directions"
-  } else if (pattern === "one significant descendant" ||
-      pattern === "one significant descendant association") {
+  } else if (pattern === "one significant descendant" || pattern === "one significant descendant association") {
     short = "1"
     label = "One significant related descendant"
-  } else if (pattern === "descendant-only signal" ||
-      pattern === "descendant-only association") {
+  } else if (pattern === "descendant-only signal" || pattern === "descendant-only association") {
     short = "D"
     label = "Descendant signal without significant parent"
   } else if (pattern === "parent and descendant association") {
@@ -260,13 +291,20 @@ function storedHierarchyContext(
     short = "N"
     label = "Neither parent nor related descendants significant"
   }
-
   return {
     short,
     label,
     significantDescendants: summary.nSignificantDescendants ?? 0,
     relatedDescendants: summary.nRelatedDescendants ?? 0,
   }
+}
+
+function storedHierarchyContext(
+  row: ConceptSummaryRow,
+  block: ChartBlockKey,
+  hierarchySummaryRows: HierarchySummaryRow[],
+): HierarchyContext | null {
+  return hierarchyContextFromSummary(findStoredHierarchySummary(row, block, hierarchySummaryRows))
 }
 
 function isHierarchyInteresting(context: HierarchyContext) {
@@ -443,6 +481,7 @@ export function DuckDbHeatmap2({
     row: ConceptSummaryRow
     block: ChartBlockKey | null
   } | null>(null)
+  const showHierarchyMarkers = population !== "significant"
 
   const rowsWithEvidence = useMemo(
     () =>
@@ -454,17 +493,54 @@ export function DuckDbHeatmap2({
     [rows],
   )
 
+  // Build hierarchy relationships once. The previous implementation scanned every chart row for
+  // every concept/analysis cell, which becomes quadratic when a result file has no precomputed
+  // hierarchySummary table. This index is linear in the loaded rows and ancestor links.
+  const hierarchyContexts = useMemo(() => {
+    const contexts = new Map<string, HierarchyContext>()
+    if (!showHierarchyMarkers) return contexts
+
+    const summariesByKey = new Map<string, HierarchySummaryRow>()
+    for (const summary of hierarchySummaryRows) {
+      summariesByKey.set(
+        `${summary.countMode}|${summary.parentConceptId}|${summary.analysisType}`,
+        summary,
+      )
+    }
+    const descendantsByParent = new Map<string, ConceptSummaryRow[]>()
+    for (const row of rows) {
+      for (const ancestorId of ancestorIds(row)) {
+        const key = `${row.countMode}|${ancestorId}`
+        const descendants = descendantsByParent.get(key) ?? []
+        descendants.push(row)
+        descendantsByParent.set(key, descendants)
+      }
+    }
+    for (const row of rows) {
+      const descendants = descendantsByParent.get(`${row.countMode}|${row.conceptId}`) ?? []
+      for (const block of HEATMAP_BLOCKS) {
+        const key = hierarchyContextKey(row, block)
+        contexts.set(
+          key,
+          hierarchyContextFromSummary(summariesByKey.get(key)) ??
+            getHierarchyContextFromDescendants(row, block, descendants),
+        )
+      }
+    }
+    return contexts
+  }, [hierarchySummaryRows, rows, showHierarchyMarkers])
+
   const rowsWithInterestingHierarchy = useMemo(
     () =>
-      rows.filter((row) =>
-        HEATMAP_BLOCKS.some((block) =>
-          isHierarchyInteresting(
-            storedHierarchyContext(row, block, hierarchySummaryRows) ??
-              getHierarchyContext(row, block, rows),
-          ),
-        ),
-      ),
-    [hierarchySummaryRows, rows],
+      showHierarchyMarkers
+        ? rows.filter((row) =>
+            HEATMAP_BLOCKS.some((block) => {
+              const context = hierarchyContexts.get(hierarchyContextKey(row, block))
+              return context != null && isHierarchyInteresting(context)
+            }),
+          )
+        : [],
+    [hierarchyContexts, rows, showHierarchyMarkers],
   )
 
   const baseDisplayRows = useMemo(() => {
@@ -511,7 +587,6 @@ export function DuckDbHeatmap2({
   }, [effectCapMode, metric, rows])
 
   const includeMode = new Set(rows.map((row) => row.countMode)).size > 1
-  const showHierarchyMarkers = population !== "significant"
 
   const displayRows = useMemo(() => {
     if (!clusterRows || baseDisplayRows.length < 3) return baseDisplayRows
@@ -533,6 +608,10 @@ export function DuckDbHeatmap2({
     }
     return clusterHeatmapRows(baseDisplayRows, derivedByKey, 1500)
   }, [baseDisplayRows, clusterRows, maxByBlock, metric])
+  const renderedRows = useMemo(
+    () => displayRows.slice(0, HEATMAP_RENDER_ROW_LIMIT),
+    [displayRows],
+  )
 
   return (
     <Stack spacing={2}>
@@ -820,7 +899,7 @@ export function DuckDbHeatmap2({
                 </TableRow>
               </TableHead>
               <TableBody>
-                {displayRows.map((row) => (
+                {renderedRows.map((row) => (
                   <TableRow key={row.rowKey} hover>
                     <TableCell
                       component="th"
@@ -848,9 +927,9 @@ export function DuckDbHeatmap2({
                     {HEATMAP_BLOCKS.map((block) => {
                       const rawValue = getChartMetricValue(row, block, metric)
                       const value = chartDisplayValue(row, block, metric)
-                      const context =
-                        storedHierarchyContext(row, block, hierarchySummaryRows) ??
-                        getHierarchyContext(row, block, rows)
+                      const context = showHierarchyMarkers
+                        ? hierarchyContexts.get(hierarchyContextKey(row, block))
+                        : null
                       const significance = chartLogP(row, block)
                       const level = metric === "-log10" && significance != null
                         ? heatmapPatternLevel(significance, maxByBlock.get(block) ?? 1)
@@ -864,7 +943,7 @@ export function DuckDbHeatmap2({
                         <TableCell
                           key={block}
                           align="center"
-                          title={`${conceptLabel(row, includeMode)} | ${block} | ${context.label} | ${METRIC_LABELS[metric]}: ${rawValue == null ? "N/A" : formatNumber(rawValue, 2)}`}
+                          title={`${conceptLabel(row, includeMode)} | ${block}${context ? ` | ${context.label}` : ""} | ${METRIC_LABELS[metric]}: ${rawValue == null ? "N/A" : formatNumber(rawValue, 2)}`}
                           onClick={() => onSelectConcept(row.rowKey)}
                       sx={{ cursor: "pointer", p: 0.25 }}
                         >
@@ -889,7 +968,7 @@ export function DuckDbHeatmap2({
                               <Box
                                 component="button"
                                 type="button"
-                                title={`Open hierarchy details: ${context.label}`}
+                                title={`Open hierarchy details: ${context?.label ?? "No hierarchy summary"}`}
                                 onClick={(event) => {
                                   event.stopPropagation()
                                   setHierarchySelection({ row, block })
@@ -904,7 +983,7 @@ export function DuckDbHeatmap2({
                                   p: 0,
                                 }}
                               >
-                                {context.short}
+                                {context?.short ?? "-"}
                               </Box>
                             )}
                           </Box>
@@ -925,7 +1004,7 @@ export function DuckDbHeatmap2({
               </TableContainer>
             </Paper>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Showing {displayRows.length} of {
+              Showing {renderedRows.length} of {
                 population === "interesting"
                   ? rowsWithInterestingHierarchy.length
                   : population === "significant"
@@ -937,6 +1016,8 @@ export function DuckDbHeatmap2({
                 : population === "significant"
                   ? " with at least one significant analysis"
                   : ""}.
+              {displayRows.length > renderedRows.length &&
+                ` The detailed table is limited to the first ${HEATMAP_RENDER_ROW_LIMIT.toLocaleString()} rows; use concept search or filters to narrow it.`}
             </Typography>
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
