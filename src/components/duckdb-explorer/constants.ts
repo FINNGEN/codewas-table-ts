@@ -44,7 +44,9 @@ export const HEATMAP_BLOCKS: ChartBlockKey[] = [
 
 export const DEFAULT_COLUMN_FILTERS: MRT_ColumnFiltersState = [
   { id: "binaryCasesControl", value: ">= 5" },
-  { id: "binaryLogP", value: ">= 5" },
+  // This is a synthetic filter rather than one table column: a concept is retained when at least
+  // one available analysis has -log10(p) >= 5.
+  { id: "anyAnalysisLogP", value: ">= 5" },
 ]
 
 // Max rows fetched from DuckDB for chart views. TSV exports bypass this. The heatmap uses a lean

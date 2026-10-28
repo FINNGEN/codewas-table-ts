@@ -5,7 +5,7 @@ import type { FilterPreset } from "../../utils/types"
 import { FilterChips, type ActiveFilter } from "../filters/FilterChips"
 import { FilterPresets } from "../filters/FilterPresets"
 import { loadPresets, savePresets } from "../filters/presetStorage"
-import { AI_CATEGORY_ALL, AI_CATEGORY_ANY } from "./constants"
+import { AI_CATEGORY_ALL, AI_CATEGORY_ANY, DEFAULT_COLUMN_FILTERS } from "./constants"
 import type { ConceptSummaryRow } from "./types"
 
 const STORAGE_KEY = "duckdb-filter-presets"
@@ -20,6 +20,9 @@ const COUNT_MODE_ID = "__countMode"
 const DOMAIN_ID = "__selectedDomain"
 const SEARCH_ID = "__searchText"
 const AI_CATEGORY_ID = "__aiCategory"
+const FILTER_LABELS: Record<string, string> = {
+  anyAnalysisLogP: "Any analysis −log10(p)",
+}
 
 type DuckDbFilterBarProps = {
   table: MRT_TableInstance<ConceptSummaryRow>
@@ -70,7 +73,7 @@ export function DuckDbFilterBar({
     .filter((f) => isFilterActive(f.value))
     .map((f) => ({
       id: f.id,
-      label: String(table.getColumn(f.id)?.columnDef.header ?? f.id),
+      label: FILTER_LABELS[f.id] ?? String(table.getColumn(f.id)?.columnDef.header ?? f.id),
       value: Array.isArray(f.value) ? `${f.value[0]} - ${f.value[1]}` : String(f.value),
       onClear: () => commitColumnFilters(appliedColumnFilters.filter((c) => c.id !== f.id)),
     }))
@@ -119,6 +122,18 @@ export function DuckDbFilterBar({
     setSelectedDomain(DEFAULT_DOMAIN)
     setSelectedAiCategory(AI_CATEGORY_ALL)
     commitSearchText("")
+  }
+
+  const handleRestoreDefaults = () => {
+    // Keep this separate from Clear all: synthetic default filters such as "Any analysis
+    // -log10(p)" are not table columns, so users otherwise have no control from which to add them
+    // back after removing the chip.
+    commitColumnFilters(DEFAULT_COLUMN_FILTERS.map((filter) => ({ ...filter })))
+    setCountMode(DEFAULT_COUNT_MODE)
+    setSelectedDomain(DEFAULT_DOMAIN)
+    setSelectedAiCategory(AI_CATEGORY_ALL)
+    commitSearchText("")
+    setSelectedPresetId("")
   }
 
   const handleSave = (name: string, includedIds: string[]) => {
@@ -183,17 +198,22 @@ export function DuckDbFilterBar({
         onEdit={handleEdit}
       />
       {presets && <Divider orientation="vertical" flexItem />}
-      <Badge color="warning" variant="dot" invisible={!isDirty}>
-        <Button
-          size="small"
-          variant={isDirty ? "contained" : "outlined"}
-          color="primary"
-          disabled={!isDirty}
-          onClick={onApply}
-        >
-          Apply
+      <Stack direction="row" spacing={0.5}>
+        <Badge color="warning" variant="dot" invisible={!isDirty}>
+          <Button
+            size="small"
+            variant={isDirty ? "contained" : "outlined"}
+            color="primary"
+            disabled={!isDirty}
+            onClick={onApply}
+          >
+            Apply filter
+          </Button>
+        </Badge>
+        <Button size="small" variant="outlined" onClick={handleRestoreDefaults}>
+          Restore default filter
         </Button>
-      </Badge>
+      </Stack>
     </Stack>
   )
 }

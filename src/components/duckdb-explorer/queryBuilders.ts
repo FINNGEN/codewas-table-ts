@@ -114,6 +114,22 @@ export function buildFilterConditions(columnFilters: MRT_ColumnFiltersState) {
   for (const filter of columnFilters) {
     const raw = String(filter.value ?? "").trim()
     if (!raw) continue
+    if (filter.id === "anyAnalysisLogP") {
+      const conditionsByAnalysis = [
+        "binaryLogP",
+        "countsLogP",
+        "ageLogP",
+        "daysLogP",
+        "continuousLogP",
+        "categoricalLogP",
+      ]
+        .map((column) => numericExpr(column, raw))
+        .filter((condition): condition is string => condition != null)
+      if (conditionsByAnalysis.length > 0) {
+        conditions.push(`(${conditionsByAnalysis.join(" OR ")})`)
+      }
+      continue
+    }
     if (filter.id === "conceptInfo") {
       const safe = escapeSqlString(raw.toLowerCase())
       conditions.push(
