@@ -1,5 +1,18 @@
 import { useState, type Dispatch, type SetStateAction } from "react"
-import { Badge, Button, Divider, Stack } from "@mui/material"
+import {
+  Badge,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  FormControlLabel,
+  Stack,
+  Switch,
+  TextField,
+  Typography,
+} from "@mui/material"
 import type { MRT_ColumnFiltersState, MRT_TableInstance } from "material-react-table"
 import type { FilterPreset } from "../../utils/types"
 import { FilterChips, type ActiveFilter } from "../filters/FilterChips"
@@ -43,6 +56,9 @@ type DuckDbFilterBarProps = {
   isDirty: boolean
   onApply: () => void
   rowCount: number
+  significanceCutoff: number
+  significanceFilterEnabled: boolean
+  onSignificanceFilterChange: (cutoff: number, enabled: boolean) => void
 }
 
 function isFilterActive(value: unknown): boolean {
@@ -65,9 +81,23 @@ export function DuckDbFilterBar({
   commitSearchText,
   isDirty,
   onApply,
+  significanceCutoff,
+  significanceFilterEnabled,
+  onSignificanceFilterChange,
 }: DuckDbFilterBarProps) {
   const [presets, setPresets] = useState<FilterPreset[]>(() => loadPresets(STORAGE_KEY))
   const [selectedPresetId, setSelectedPresetId] = useState<string>("")
+  const [cutoffEditorOpen, setCutoffEditorOpen] = useState(false)
+  const [cutoffDraft, setCutoffDraft] = useState(String(significanceCutoff))
+  const [cutoffEnabledDraft, setCutoffEnabledDraft] = useState(significanceFilterEnabled)
+
+  const openCutoffEditor = () => {
+    setCutoffDraft(String(significanceCutoff))
+    setCutoffEnabledDraft(significanceFilterEnabled)
+    setCutoffEditorOpen(true)
+  }
+  const parsedCutoff = Number(cutoffDraft)
+  const cutoffIsValid = Number.isFinite(parsedCutoff) && parsedCutoff > 0
 
   const columnFilterEntries: ActiveFilter[] = appliedColumnFilters
     .filter((f) => isFilterActive(f.value))
@@ -76,6 +106,7 @@ export function DuckDbFilterBar({
       label: FILTER_LABELS[f.id] ?? String(table.getColumn(f.id)?.columnDef.header ?? f.id),
       value: Array.isArray(f.value) ? `${f.value[0]} - ${f.value[1]}` : String(f.value),
       onClear: () => commitColumnFilters(appliedColumnFilters.filter((c) => c.id !== f.id)),
+      onEdit: f.id === "anyAnalysisLogP" ? openCutoffEditor : undefined,
     }))
 
   const extraEntries: ActiveFilter[] = []
@@ -213,7 +244,66 @@ export function DuckDbFilterBar({
         <Button size="small" variant="outlined" onClick={handleRestoreDefaults}>
           Restore default filter
         </Button>
+        <Button size="small" variant="outlined" onClick={openCutoffEditor}>
+          {significanceFilterEnabled
+            ? `P-value cutoff: −log10(p) ≥ ${significanceCutoff}`
+            : `P-value cutoff: Off (saved ${significanceCutoff})`}
+        </Button>
       </Stack>
+      <Dialog open={cutoffEditorOpen} onClose={() => setCutoffEditorOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Whole-viewer p-value cutoff</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Keep concepts when at least one available analysis reaches this −log10(p) value.
+              A cutoff of 8 means p ≤ 1×10⁻⁸. This is a conservative display threshold, not a
+              dataset-specific multiple-testing correction.
+            </Typography>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={cutoffEnabledDraft}
+                  onChange={(event) => setCutoffEnabledDraft(event.target.checked)}
+                />
+              }
+              label="Apply cutoff to the whole viewer"
+            />
+            <TextField
+              label="−log10(p) cutoff"
+              type="number"
+              value={cutoffDraft}
+              disabled={!cutoffEnabledDraft}
+              error={cutoffEnabledDraft && !cutoffIsValid}
+              helperText={
+                cutoffEnabledDraft && !cutoffIsValid
+                  ? "Enter a number greater than zero."
+                  : cutoffIsValid
+                    ? `Equivalent to p ≤ ${Math.pow(10, -parsedCutoff).toExponential(2)}`
+                    : ""
+              }
+              onChange={(event) => setCutoffDraft(event.target.value)}
+              slotProps={{ htmlInput: { min: 0, step: 0.1 } }}
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCutoffEditorOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            disabled={cutoffEnabledDraft && !cutoffIsValid}
+            onClick={() => {
+              onSignificanceFilterChange(
+                cutoffIsValid ? parsedCutoff : significanceCutoff,
+                cutoffEnabledDraft,
+              )
+              setCutoffEditorOpen(false)
+            }}
+          >
+            Apply
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Stack>
   )
 }

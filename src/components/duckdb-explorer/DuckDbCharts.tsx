@@ -11,6 +11,7 @@ export function DuckDbCharts({
   rows,
   hierarchySummaryRows,
   chartLoading,
+  significanceCutoff,
   chartScope,
   setChartScope,
   onSelectConcept,
@@ -19,6 +20,7 @@ export function DuckDbCharts({
   rows: ConceptSummaryRow[]
   hierarchySummaryRows: HierarchySummaryRow[]
   chartLoading: boolean
+  significanceCutoff: number
   chartScope: ChartScope
   setChartScope: Dispatch<SetStateAction<ChartScope>>
   onSelectConcept: (rowKey: string) => void
@@ -79,6 +81,7 @@ export function DuckDbCharts({
       rows={rows}
       hierarchySummaryRows={hierarchySummaryRows}
       chartLoading={chartLoading}
+      significanceCutoff={significanceCutoff}
       onSelectConcept={onSelectConcept}
       sharedControls={sharedControls}
     />
@@ -93,6 +96,7 @@ export function DuckDbCharts({
     <DuckDbFindings
       rows={rows}
       chartLoading={chartLoading}
+      significanceCutoff={significanceCutoff}
       onSelectConcept={onSelectConcept}
       onOpenConceptSet={onOpenConceptSet}
       sharedControls={sharedControls}

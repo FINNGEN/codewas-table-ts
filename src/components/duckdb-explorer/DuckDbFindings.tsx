@@ -578,12 +578,14 @@ function FindingsAbout() {
 export function DuckDbFindings({
   rows,
   chartLoading,
+  significanceCutoff,
   onSelectConcept,
   onOpenConceptSet,
   sharedControls,
 }: {
   rows: ConceptSummaryRow[]
   chartLoading: boolean
+  significanceCutoff: number
   onSelectConcept: (rowKey: string) => void
   onOpenConceptSet: (selection: { label: string; rowKeys: string[] }) => void
   sharedControls: ReactNode
@@ -593,12 +595,18 @@ export function DuckDbFindings({
   const [clusterCount, setClusterCount] = useState<FindingsClusterCount>("auto")
   const [parentMode, setParentMode] = useState<ParentResultMode>("own")
   const [capMode, setCapMode] = useState<EffectCapMode>("p99")
-  const [evidenceCutoff, setEvidenceCutoff] = useState(5)
+  const [evidenceCutoff, setEvidenceCutoff] = useState(significanceCutoff)
   const [maxRows, setMaxRows] = useState(25)
   const [searchText, setSearchText] = useState("")
   const [path, setPath] = useState<string[]>([])
   const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<string[]>([])
   const [previousRows, setPreviousRows] = useState(rows)
+  const [previousSignificanceCutoff, setPreviousSignificanceCutoff] =
+    useState(significanceCutoff)
+  if (previousSignificanceCutoff !== significanceCutoff) {
+    setPreviousSignificanceCutoff(significanceCutoff)
+    setEvidenceCutoff(significanceCutoff)
+  }
   if (previousRows !== rows) {
     setPreviousRows(rows)
     setPath([])
@@ -916,6 +924,12 @@ export function DuckDbFindings({
               <MenuItem value={1.3}>-log10(p) &gt;= 1.3</MenuItem>
               <MenuItem value={2}>-log10(p) &gt;= 2</MenuItem>
               <MenuItem value={5}>-log10(p) &gt;= 5</MenuItem>
+              {![1.3, 2, 5, 8, 10].includes(significanceCutoff) && (
+                <MenuItem value={significanceCutoff}>
+                  -log10(p) &gt;= {significanceCutoff} (viewer cutoff)
+                </MenuItem>
+              )}
+              <MenuItem value={8}>-log10(p) &gt;= 8</MenuItem>
               <MenuItem value={10}>-log10(p) &gt;= 10</MenuItem>
             </Select>
           </FormControl>

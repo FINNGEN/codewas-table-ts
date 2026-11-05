@@ -42,11 +42,16 @@ export const HEATMAP_BLOCKS: ChartBlockKey[] = [
   "Categorical",
 ]
 
+// Conservative default for the initial whole-viewer significance filter. With roughly 30,000
+// concepts, -log10(p) = 8 (p = 1e-8) is stricter than a simple Bonferroni threshold. Keep the value
+// editable in the viewer rather than presenting it as a dataset-specific correction.
+export const DEFAULT_LOG_P_CUTOFF = 8
+
 export const DEFAULT_COLUMN_FILTERS: MRT_ColumnFiltersState = [
   { id: "binaryCasesControl", value: ">= 5" },
   // This is a synthetic filter rather than one table column: a concept is retained when at least
-  // one available analysis has -log10(p) >= 5.
-  { id: "anyAnalysisLogP", value: ">= 5" },
+  // one available analysis reaches the editable whole-viewer significance cutoff.
+  { id: "anyAnalysisLogP", value: `>= ${DEFAULT_LOG_P_CUTOFF}` },
 ]
 
 // Max rows fetched from DuckDB for chart views. TSV exports bypass this. The heatmap uses a lean

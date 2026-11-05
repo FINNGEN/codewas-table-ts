@@ -21,6 +21,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TableSortLabel,
   TextField,
   Typography,
 } from "@mui/material"
@@ -47,7 +48,7 @@ import type {
 } from "./types"
 import { ChartAboutDialog } from "./ChartAboutDialog"
 
-const SIGNIFICANCE_CUTOFF = 5
+const PRECOMPUTED_HIERARCHY_CUTOFF = 5
 // The detailed heatmap is an HTML table rather than a virtualized canvas. Keeping its rendered
 // rows bounded prevents a broad chart query from creating hundreds of thousands of DOM nodes.
 const HEATMAP_RENDER_ROW_LIMIT = 2000
@@ -60,6 +61,11 @@ const METRIC_LABELS: Record<ChartMetricKey, string> = {
 
 type EffectCapMode = "full" | "p95" | "p98" | "p99"
 type HeatmapPopulation = "interesting" | "significant" | "all"
+type HeatmapSortKey = "concept" | ChartBlockKey
+type HeatmapSort = {
+  key: HeatmapSortKey
+  direction: "asc" | "desc"
+}
 
 function percentile(values: number[], probability: number) {
   if (values.length === 0) return 1
@@ -137,6 +143,7 @@ function getHierarchyContext(
   row: ConceptSummaryRow,
   block: ChartBlockKey,
   allRows: ConceptSummaryRow[],
+  significanceCutoff: number,
 ): HierarchyContext {
   const descendants = allRows.filter(
     (candidate) =>
@@ -145,10 +152,9 @@ function getHierarchyContext(
       ancestorIds(candidate).has(String(row.conceptId)),
   )
   const significantDescendants = descendants.filter(
-    (candidate) => (chartLogP(candidate, block) ?? 0) >= SIGNIFICANCE_CUTOFF,
+    (candidate) => (chartLogP(candidate, block) ?? 0) >= significanceCutoff,
   )
-  const parentSignificant =
-    (chartLogP(row, block) ?? 0) >= SIGNIFICANCE_CUTOFF
+  const parentSignificant = (chartLogP(row, block) ?? 0) >= significanceCutoff
 
   if (descendants.length === 0) {
     return {
@@ -215,11 +221,12 @@ function getHierarchyContextFromDescendants(
   row: ConceptSummaryRow,
   block: ChartBlockKey,
   descendants: ConceptSummaryRow[],
+  significanceCutoff: number,
 ): HierarchyContext {
   const significantDescendants = descendants.filter(
-    (candidate) => (chartLogP(candidate, block) ?? 0) >= SIGNIFICANCE_CUTOFF,
+    (candidate) => (chartLogP(candidate, block) ?? 0) >= significanceCutoff,
   )
-  const parentSignificant = (chartLogP(row, block) ?? 0) >= SIGNIFICANCE_CUTOFF
+  const parentSignificant = (chartLogP(row, block) ?? 0) >= significanceCutoff
 
   if (descendants.length === 0) {
     return { short: "-", label: "No exported related descendants", significantDescendants: 0, relatedDescendants: 0 }
@@ -299,14 +306,6 @@ function hierarchyContextFromSummary(summary: HierarchySummaryRow | undefined): 
   }
 }
 
-function storedHierarchyContext(
-  row: ConceptSummaryRow,
-  block: ChartBlockKey,
-  hierarchySummaryRows: HierarchySummaryRow[],
-): HierarchyContext | null {
-  return hierarchyContextFromSummary(findStoredHierarchySummary(row, block, hierarchySummaryRows))
-}
-
 function isHierarchyInteresting(context: HierarchyContext) {
   return ["P", "C", "D", "1", "M", "A"].includes(context.short)
 }
@@ -321,11 +320,13 @@ function HierarchyDialog({
   selection,
   rows,
   hierarchySummaryRows,
+  significanceCutoff,
   onClose,
 }: {
   selection: { row: ConceptSummaryRow; block: ChartBlockKey | null } | null
   rows: ConceptSummaryRow[]
   hierarchySummaryRows: HierarchySummaryRow[]
+  significanceCutoff: number
   onClose: () => void
 }) {
   if (!selection) return null
@@ -364,14 +365,16 @@ function HierarchyDialog({
           </TableHead>
           <TableBody>
             {blocks.map((analysis) => {
+              const stored = significanceCutoff === PRECOMPUTED_HIERARCHY_CUTOFF
+                ? findStoredHierarchySummary(row, analysis, hierarchySummaryRows)
+                : undefined
               const context =
-                storedHierarchyContext(row, analysis, hierarchySummaryRows) ??
-                getHierarchyContext(row, analysis, rows)
-              const stored = findStoredHierarchySummary(row, analysis, hierarchySummaryRows)
+                (stored ? hierarchyContextFromSummary(stored) : null) ??
+                getHierarchyContext(row, analysis, rows, significanceCutoff)
               const significant = stored
                 ? []
                 : descendants.filter(
-                    (candidate) => (chartLogP(candidate, analysis) ?? 0) >= SIGNIFICANCE_CUTOFF,
+                    (candidate) => (chartLogP(candidate, analysis) ?? 0) >= significanceCutoff,
                   )
               const strongest = stored
                 ? null
@@ -463,12 +466,14 @@ export function DuckDbHeatmap2({
   rows,
   hierarchySummaryRows,
   chartLoading,
+  significanceCutoff,
   onSelectConcept,
   sharedControls,
 }: {
   rows: ConceptSummaryRow[]
   hierarchySummaryRows: HierarchySummaryRow[]
   chartLoading: boolean
+  significanceCutoff: number
   onSelectConcept: (rowKey: string) => void
   sharedControls: ReactNode
 }) {
@@ -477,20 +482,32 @@ export function DuckDbHeatmap2({
   const [metric, setMetric] = useState<ChartMetricKey>("standardizedEffect")
   const [effectCapMode, setEffectCapMode] = useState<EffectCapMode>("p95")
   const [clusterRows, setClusterRows] = useState(false)
+  const [sort, setSort] = useState<HeatmapSort | null>(null)
   const [hierarchySelection, setHierarchySelection] = useState<{
     row: ConceptSummaryRow
     block: ChartBlockKey | null
   } | null>(null)
   const showHierarchyMarkers = population !== "significant"
 
+  function requestSort(key: HeatmapSortKey) {
+    setClusterRows(false)
+    setSort((current) => ({
+      key,
+      direction:
+        current?.key === key
+          ? current.direction === "asc" ? "desc" : "asc"
+          : key === "concept" ? "asc" : "desc",
+    }))
+  }
+
   const rowsWithEvidence = useMemo(
     () =>
       rows.filter((row) =>
         HEATMAP_BLOCKS.some(
-          (block) => (chartLogP(row, block) ?? 0) >= SIGNIFICANCE_CUTOFF,
+          (block) => (chartLogP(row, block) ?? 0) >= significanceCutoff,
         ),
       ),
-    [rows],
+    [rows, significanceCutoff],
   )
 
   // Build hierarchy relationships once. The previous implementation scanned every chart row for
@@ -522,13 +539,15 @@ export function DuckDbHeatmap2({
         const key = hierarchyContextKey(row, block)
         contexts.set(
           key,
-          hierarchyContextFromSummary(summariesByKey.get(key)) ??
-            getHierarchyContextFromDescendants(row, block, descendants),
+          significanceCutoff === PRECOMPUTED_HIERARCHY_CUTOFF
+            ? hierarchyContextFromSummary(summariesByKey.get(key)) ??
+                getHierarchyContextFromDescendants(row, block, descendants, significanceCutoff)
+            : getHierarchyContextFromDescendants(row, block, descendants, significanceCutoff),
         )
       }
     }
     return contexts
-  }, [hierarchySummaryRows, rows, showHierarchyMarkers])
+  }, [hierarchySummaryRows, rows, showHierarchyMarkers, significanceCutoff])
 
   const rowsWithInterestingHierarchy = useMemo(
     () =>
@@ -550,9 +569,32 @@ export function DuckDbHeatmap2({
         : population === "significant"
           ? rowsWithEvidence
           : rows
-    return populationRows
-      .filter((row) => matchesHeatmapSearch(row, searchText))
-      .sort((left, right) => {
+    const filteredRows = populationRows.filter((row) => matchesHeatmapSearch(row, searchText))
+
+    if (sort != null) {
+      return filteredRows.sort((left, right) => {
+        const conceptComparison = conceptLabel(left, true).localeCompare(
+          conceptLabel(right, true),
+          undefined,
+          { sensitivity: "base", numeric: true },
+        )
+        if (sort.key === "concept") {
+          return sort.direction === "asc" ? conceptComparison : -conceptComparison
+        }
+
+        const leftValue = chartDisplayValue(left, sort.key, metric)
+        const rightValue = chartDisplayValue(right, sort.key, metric)
+        if (leftValue == null && rightValue == null) return conceptComparison
+        if (leftValue == null) return 1
+        if (rightValue == null) return -1
+
+        const valueComparison = leftValue - rightValue
+        if (valueComparison === 0) return conceptComparison
+        return sort.direction === "asc" ? valueComparison : -valueComparison
+      })
+    }
+
+    return filteredRows.sort((left, right) => {
         const leftScore = HEATMAP_BLOCKS.reduce(
           (score, block) => Math.max(score, chartLogP(left, block) ?? 0),
           0,
@@ -563,7 +605,7 @@ export function DuckDbHeatmap2({
         )
         return rightScore - leftScore
       })
-  }, [population, rows, rowsWithEvidence, rowsWithInterestingHierarchy, searchText])
+  }, [metric, population, rows, rowsWithEvidence, rowsWithInterestingHierarchy, searchText, sort])
 
   const maxByBlock = useMemo(() => {
     const result = new Map<ChartBlockKey, number>()
@@ -619,6 +661,7 @@ export function DuckDbHeatmap2({
         selection={hierarchySelection}
         rows={rows}
         hierarchySummaryRows={hierarchySummaryRows}
+        significanceCutoff={significanceCutoff}
         onClose={() => setHierarchySelection(null)}
       />
       <Grid container spacing={2} sx={{ p: 1, pt: 2 }}>
@@ -683,7 +726,7 @@ export function DuckDbHeatmap2({
             </Typography>
             <Typography variant="body2">
               The marker in each cell summarizes the parent&apos;s result together with its related
-              descendants. It is based on the <b>-log10(p) &gt;= 5</b> significance cutoff, not on the
+              descendants. It is based on the <b>-log10(p) &gt;= {significanceCutoff}</b> significance cutoff, not on the
               selected color metric, so it stays the same when you switch between p-value, effect
               size, and standardized effect.
             </Typography>
@@ -718,13 +761,18 @@ export function DuckDbHeatmap2({
               as zero for ordering only; the cells remain empty. Clustering changes row order, not
               the results or their colors.
             </Typography>
+            <Typography variant="body2">
+              Click the <b>Concept</b> header to sort alphabetically, or click an analysis header to
+              sort by that column&apos;s currently displayed metric. Click the same header again to
+              reverse the direction. Column sorting turns row clustering off.
+            </Typography>
             <Box sx={{ display: "none" }}>
             <Typography variant="subtitle2" color="text.primary">Inputs</Typography>
             <Typography variant="body2">
               <b>Plot scope</b> chooses Filtered concepts or All concepts from the main viewer.
               <b> Plot type</b> selects Heatmap. <b>Concept search</b> filters by name, source
               code, or concept ID. <b>Concept population</b> shows either Significant concepts
-              (at least one -log10(p) &gt;= 5) or All concepts.
+              (at least one -log10(p) &gt;= {significanceCutoff}) or All concepts.
             </Typography>
             <Typography variant="subtitle2" color="text.primary">Cell colors</Typography>
             <Typography variant="body2">
@@ -763,7 +811,7 @@ export function DuckDbHeatmap2({
               <b>Plot scope</b> determines which concepts are supplied from the main viewer:
               Filtered concepts uses the active table filters, while All concepts ignores those
               column filters. <b>Concept population</b> then determines which supplied concepts are
-              displayed here: Significant concepts keeps concepts with at least one −log10(p) ≥ 5;
+              displayed here: Significant concepts keeps concepts with at least one −log10(p) ≥ {significanceCutoff};
               All concepts keeps every supplied concept. If a p-value filter is already active,
               these choices may overlap.
             </Typography>
@@ -771,7 +819,7 @@ export function DuckDbHeatmap2({
             <Typography variant="body2">
               <b>Concept population</b> controls which supplied concepts are displayed:
               Significant concepts keeps concepts with at least one significant analysis
-              (−log10(p) ≥ 5), while All concepts keeps every supplied concept. These choices can
+              (−log10(p) ≥ {significanceCutoff}), while All concepts keeps every supplied concept. These choices can
               overlap with the main viewer&apos;s active filters.
             </Typography>
 
@@ -869,7 +917,11 @@ export function DuckDbHeatmap2({
               <Switch
                 size="small"
                 checked={clusterRows}
-                onChange={(event) => setClusterRows(event.target.checked)}
+                onChange={(event) => {
+                  const checked = event.target.checked
+                  setClusterRows(checked)
+                  if (checked) setSort(null)
+                }}
               />
             }
             label="Cluster concept rows"
@@ -887,13 +939,28 @@ export function DuckDbHeatmap2({
               <TableHead>
                 <TableRow>
                   <TableCell sx={{ minWidth: 280, position: "sticky", left: 0, zIndex: 3, backgroundColor: "background.paper" }}>
-                    Concept (source code)
+                    <TableSortLabel
+                      active={sort?.key === "concept"}
+                      direction={sort?.key === "concept" ? sort.direction : "asc"}
+                      onClick={() => requestSort("concept")}
+                    >
+                      Concept (source code)
+                    </TableSortLabel>
                   </TableCell>
                   {HEATMAP_BLOCKS.map((block) => (
                     <TableCell key={block} align="center" sx={{ minWidth: 92, fontSize: "0.78rem" }}>
-                      {getHeatmapHeaderLines(block).map((line) => (
-                        <div key={line}>{line}</div>
-                      ))}
+                      <TableSortLabel
+                        active={sort?.key === block}
+                        direction={sort?.key === block ? sort.direction : "desc"}
+                        onClick={() => requestSort(block)}
+                        sx={{ textAlign: "center" }}
+                      >
+                        <Box component="span">
+                          {getHeatmapHeaderLines(block).map((line) => (
+                            <div key={line}>{line}</div>
+                          ))}
+                        </Box>
+                      </TableSortLabel>
                     </TableCell>
                   ))}
                 </TableRow>
@@ -1028,7 +1095,11 @@ export function DuckDbHeatmap2({
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                 {clusterRows
                   ? `Rows are clustered using ${METRIC_LABELS[metric].toLowerCase()} values across analyses.`
-                  : "Rows are ordered by strongest statistical evidence."}
+                  : sort == null
+                    ? "Rows are ordered by strongest statistical evidence."
+                    : sort.key === "concept"
+                      ? `Rows are sorted by concept, ${sort.direction === "asc" ? "A to Z" : "Z to A"}.`
+                      : `Rows are sorted by ${getHeatmapHeaderLines(sort.key).join(" ")} ${METRIC_LABELS[metric].toLowerCase()}, ${sort.direction === "asc" ? "ascending" : "descending"}.`}
               </Typography>
               {clusterRows && (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>

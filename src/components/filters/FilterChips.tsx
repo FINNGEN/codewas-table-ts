@@ -18,6 +18,7 @@ export type ActiveFilter = {
   label: string
   value: string
   onClear: () => void
+  onEdit?: () => void
 }
 
 type FilterChipsProps = {
@@ -79,8 +80,10 @@ export function FilterChips({ filters, onClearAll, onSave }: FilterChipsProps) {
         <Chip
           key={filter.id}
           label={`${filter.label}: ${filter.value}`}
+          onClick={filter.onEdit}
           onDelete={filter.onClear}
           size="small"
+          clickable={filter.onEdit != null}
         />
       ))}
 

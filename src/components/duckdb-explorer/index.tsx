@@ -30,6 +30,7 @@ import {
   AI_PRIORITIZATION_TABLE,
   CHART_ROWS_LIMIT,
   DEFAULT_COLUMN_FILTERS,
+  DEFAULT_LOG_P_CUTOFF,
   DISPLAY_ANALYSIS_TYPES,
 } from "./constants"
 import { ConceptDetailDialog } from "./ConceptDetailDialog"
@@ -81,6 +82,15 @@ function filtersEqual(a: MRT_ColumnFiltersState, b: MRT_ColumnFiltersState): boo
   return JSON.stringify(normalize(a)) === JSON.stringify(normalize(b))
 }
 
+function cutoffFromFilters(filters: MRT_ColumnFiltersState): number | null {
+  const value = filters.find((filter) => filter.id === "anyAnalysisLogP")?.value
+  if (typeof value !== "string") return null
+  const match = value.trim().match(/^>=\s*(\d+(?:\.\d+)?)$/)
+  if (!match) return null
+  const cutoff = Number(match[1])
+  return Number.isFinite(cutoff) && cutoff > 0 ? cutoff : null
+}
+
 export default function DuckDbExplorer({
   dataSource,
   pageView,
@@ -128,6 +138,9 @@ export default function DuckDbExplorer({
   const [columnFilters, setColumnFilters] = useState<MRT_ColumnFiltersState>(DEFAULT_COLUMN_FILTERS)
   const [appliedColumnFilters, setAppliedColumnFilters] =
     useState<MRT_ColumnFiltersState>(DEFAULT_COLUMN_FILTERS)
+  // Retain the selected cutoff even while its whole-viewer filter is disabled, so users can turn
+  // it back on without restoring every default or retyping the value.
+  const [significanceCutoff, setSignificanceCutoff] = useState(DEFAULT_LOG_P_CUTOFF)
   const [appliedSearchText, setAppliedSearchText] = useState("")
   const [columnVisibility, setColumnVisibility] = useState<MRT_VisibilityState>({
     ancestorConceptIds: false,
@@ -154,6 +167,8 @@ export default function DuckDbExplorer({
   const applyFilters = useCallback(() => {
     setAppliedColumnFilters(columnFilters)
     setAppliedSearchText(searchText)
+    const nextCutoff = cutoffFromFilters(columnFilters)
+    if (nextCutoff != null) setSignificanceCutoff(nextCutoff)
   }, [columnFilters, searchText])
 
   // Explicit single-click actions (chips, clear-all, presets) take effect immediately: they update
@@ -161,6 +176,8 @@ export default function DuckDbExplorer({
   const commitColumnFilters = useCallback((next: MRT_ColumnFiltersState) => {
     setColumnFilters(next)
     setAppliedColumnFilters(next)
+    const nextCutoff = cutoffFromFilters(next)
+    if (nextCutoff != null) setSignificanceCutoff(nextCutoff)
   }, [])
   const commitSearchText = useCallback((next: string) => {
     setSearchText(next)
@@ -189,6 +206,23 @@ export default function DuckDbExplorer({
   const filtersDirty = useMemo(
     () => searchText !== appliedSearchText || !filtersEqual(columnFilters, appliedColumnFilters),
     [searchText, appliedSearchText, columnFilters, appliedColumnFilters],
+  )
+  const significanceFilterEnabled = appliedColumnFilters.some(
+    (filter) => filter.id === "anyAnalysisLogP",
+  )
+  const changeSignificanceFilter = useCallback(
+    (cutoff: number, enabled: boolean) => {
+      setSignificanceCutoff(cutoff)
+      const withoutCutoff = appliedColumnFilters.filter(
+        (filter) => filter.id !== "anyAnalysisLogP",
+      )
+      commitColumnFilters(
+        enabled
+          ? [...withoutCutoff, { id: "anyAnalysisLogP", value: `>= ${cutoff}` }]
+          : withoutCutoff,
+      )
+    },
+    [appliedColumnFilters, commitColumnFilters],
   )
 
   useEffect(() => {
@@ -957,6 +991,9 @@ export default function DuckDbExplorer({
             isDirty={filtersDirty}
             onApply={applyFilters}
             rowCount={tableRowCount}
+            significanceCutoff={significanceCutoff}
+            significanceFilterEnabled={significanceFilterEnabled}
+            onSignificanceFilterChange={changeSignificanceFilter}
           />
         </Stack>
         {(tableLoading || chartLoading || hierarchyLoading || exportLoading) && (
@@ -988,6 +1025,7 @@ export default function DuckDbExplorer({
                 rows={chartRows}
                 hierarchySummaryRows={hierarchySummaryRows}
                 chartLoading={chartLoading}
+                significanceCutoff={significanceCutoff}
                 chartScope={chartScope}
                 setChartScope={setChartScope}
                 onSelectConcept={focusRow}
