@@ -1,4 +1,4 @@
-import { Table, TableBody, TableCell, TableContainer, TableRow, Box } from "@mui/material"
+import { Box, Table, TableBody, TableCell, TableContainer, TableRow, Tooltip } from "@mui/material"
 import type { CohortInfoIndex } from "./types"
 
 type CohortsInfoTableProps = {
@@ -22,18 +22,44 @@ export function CohortsInfoTable({ cohortsInfo }: CohortsInfoTableProps) {
   if (cohorts.length === 0) return null
 
   return (
-    <TableContainer component={Box} sx={{ width: "auto", minWidth: "350px", maxWidth: "500px" }}>
-      <Table size="small" aria-label="cohorts info">
+    <TableContainer
+      component={Box}
+      sx={{ width: 360, minWidth: 360, maxWidth: 360, flexShrink: 0, overflow: "hidden" }}
+    >
+      <Table size="small" aria-label="cohorts info" sx={{ width: 360, tableLayout: "fixed" }}>
         <TableBody>
           {cohorts.map((cohort) => (
             <TableRow key={cohort.cohortId}>
-              <TableCell sx={cellSx}>{cohort.cohortName}</TableCell>
+              <TableCell
+                sx={{
+                  ...cellSx,
+                  width: 240,
+                  maxWidth: 240,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                <Tooltip title={cohort.cohortName} placement="top-start">
+                  <Box component="span">{cohort.cohortName}</Box>
+                </Tooltip>
+              </TableCell>
               {/* <TableCell sx={cellSx}>{cohort.shortName}</TableCell> */}
-              <TableCell sx={{ ...cellSx, color: `${cohort.cohortUse}.main`, fontWeight: 700 }}>
+              <TableCell
+                sx={{
+                  ...cellSx,
+                  width: 50,
+                  color: `${cohort.cohortUse}.main`,
+                  fontWeight: 700,
+                }}
+              >
                 {cohort.cohortUse}
               </TableCell>
-              <TableCell sx={cellSx} align="right">
-                {cohort.cohortSubjects?.toLocaleString() ?? "N/A"}
+              <TableCell sx={{ ...cellSx, width: 70 }} align="right">
+                <Tooltip title="Sample size" placement="top-end">
+                  <Box component="span">
+                    n={cohort.cohortSubjects?.toLocaleString() ?? "N/A"}
+                  </Box>
+                </Tooltip>
               </TableCell>
             </TableRow>
           ))}
