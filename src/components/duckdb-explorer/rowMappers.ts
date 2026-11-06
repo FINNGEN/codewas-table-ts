@@ -34,6 +34,7 @@ export function mapSummaryRow(row: BlockMetricRow): ConceptSummaryRow {
     binaryControlYes: (row.binaryControlYes as number | null) ?? null,
     binaryTotalCases: (row.binaryTotalCases as number | null) ?? null,
     binaryTotalControls: (row.binaryTotalControls as number | null) ?? null,
+    binaryPpvPercent: (row.binaryPpvPercent as number | null) ?? null,
     binaryPValue: (row.binaryPValue as number | null) ?? null,
     binaryLogP: (row.binaryLogP as number | null) ?? null,
     binaryEffectSize: (row.binaryEffectSize as number | null) ?? null,

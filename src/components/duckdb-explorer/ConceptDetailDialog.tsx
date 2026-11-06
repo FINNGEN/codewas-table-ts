@@ -112,6 +112,15 @@ const CopyableEntry = ({ label, value }: { label: string; value: string | number
   )
 }
 
+function formatConceptPrevalence(
+  count: number | null | undefined,
+  total: number | null | undefined,
+) {
+  if (count == null) return "N/A"
+  if (total == null || total <= 0) return count.toLocaleString()
+  return `${count.toLocaleString()} of ${total.toLocaleString()} (${formatNumber((100 * count) / total, 2)}%)`
+}
+
 export function ConceptDetailDialog({
   row,
   onClose,
@@ -165,6 +174,18 @@ export function ConceptDetailDialog({
             <CopyableEntry label="Concept ID" value={row.conceptId} />
             <CopyableEntry label="Domain" value={row.domainId} />
             <CopyableEntry label="Count mode" value={row.countMode} />
+            <CopyableEntry
+              label="People with concept"
+              value={`Cases ${formatConceptPrevalence(row.binaryCaseYes, row.binaryTotalCases)}; Controls ${formatConceptPrevalence(row.binaryControlYes, row.binaryTotalControls)}`}
+            />
+            <CopyableEntry
+              label="PPV"
+              value={
+                row.binaryPpvPercent == null
+                  ? "N/A"
+                  : `${formatNumber(row.binaryPpvPercent, 1)}% (cohort-dependent; reflects the analyzed case/control ratio)`
+              }
+            />
             <CopyableEntry
               label="Ancestors"
               value={row.ancestorConceptIds ? row.ancestorConceptIds.split(",").join(", ") : "N/A"}

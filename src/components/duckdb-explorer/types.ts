@@ -21,6 +21,7 @@ export type ConceptSummaryRow = {
   binaryControlYes?: number | null
   binaryTotalCases?: number | null
   binaryTotalControls?: number | null
+  binaryPpvPercent?: number | null
   binaryPValue?: number | null
   binaryLogP?: number | null
   binaryEffectSize?: number | null

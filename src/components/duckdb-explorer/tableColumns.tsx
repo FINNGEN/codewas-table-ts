@@ -10,6 +10,7 @@ import {
   MAX_NEG_LOG10,
   buildDistributionRows,
   buildStats,
+  formatNumber,
   negLog10,
   parseCategoricalDistribution,
 } from "./utils/utils"
@@ -426,6 +427,22 @@ export function buildColumns(aiAvailable = false): MRT_ColumnDef<ConceptSummaryR
               <NA_Chip />
             ),
           size: 50,
+        },
+        {
+          id: "binaryPpvPercent",
+          header: "PPV",
+          accessorFn: (row) => row.binaryPpvPercent ?? null,
+          ...numericFilterProps,
+          Cell: ({ cell }) => {
+            const value = cell.getValue<number | null>()
+            if (value == null) return <NA_Chip />
+            return (
+              <Tooltip title="Cohort-dependent: reflects the analyzed case/control sampling ratio.">
+                <Typography variant="body2">{formatNumber(value, 1)}%</Typography>
+              </Tooltip>
+            )
+          },
+          size: 65,
         },
         {
           id: "binaryDistribution",

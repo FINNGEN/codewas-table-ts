@@ -68,6 +68,7 @@ export function summaryRowsToTsv(rows: ConceptSummaryRow[]) {
       : {}),
     binaryCases: row.binaryCaseYes ?? "",
     binaryControls: row.binaryControlYes ?? "",
+    binaryPpvPercent: row.binaryPpvPercent ?? "",
     binaryLogP: negLog10(row.binaryPValue) ?? "",
     binaryEffect: row.binaryEffectSize ?? "",
     countsCaseMean: row.countsCaseMean ?? "",

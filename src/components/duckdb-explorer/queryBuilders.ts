@@ -92,6 +92,7 @@ export function buildFilterConditions(columnFilters: MRT_ColumnFiltersState) {
   }
   const numericMap: Record<string, string> = {
     binaryCasesControl: "binaryCaseYes",
+    binaryPpvPercent: "binaryPpvPercent",
     binaryLogP: "binaryLogP",
     binaryEffect: "binaryEffectSize",
     countsMean: "countsCaseMean",
@@ -161,6 +162,7 @@ export function buildSortExpression(sorting: MRT_SortingState) {
     conceptInfo: "conceptName",
     ancestorConceptIds: "ancestorConceptIds",
     binaryCasesControl: "binaryCaseYes",
+    binaryPpvPercent: "binaryPpvPercent",
     binaryLogP: "binaryLogP",
     binaryEffect: "binaryEffectSize",
     countsMean: "countsCaseMean",
@@ -424,6 +426,11 @@ function buildSummaryQueryCtes(
         bs.binaryControlYes,
         bs.binaryTotalCases,
         bs.binaryTotalControls,
+        CASE
+          WHEN coalesce(bs.binaryCaseYes, 0) + coalesce(bs.binaryControlYes, 0) > 0
+            THEN 100.0 * bs.binaryCaseYes / (bs.binaryCaseYes + bs.binaryControlYes)
+          ELSE NULL
+        END AS binaryPpvPercent,
         bs.binaryPValue,
         ${negLog10Sql("bs.binaryPValue")} AS binaryLogP,
         bs.binaryEffectSize,
