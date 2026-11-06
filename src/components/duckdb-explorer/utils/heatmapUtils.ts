@@ -29,6 +29,17 @@ export function divergingColor(t: number) {
   return clamped < 0 ? divergingNegative(-clamped) : divergingPositive(clamped)
 }
 
+export type EvidenceDirection = "negative" | "positive" | "unsigned"
+
+// In p-value mode the color channel carries direction while lightness carries evidence strength.
+// Categorical tests have no signed effect, so they retain the established purple p-value ramp.
+export function evidenceDirectionColor(t: number, direction: EvidenceDirection) {
+  const strength = Math.max(0, Math.min(1, t))
+  if (direction === "negative") return divergingNegative(strength)
+  if (direction === "positive") return divergingPositive(strength)
+  return rampColor(strength)
+}
+
 export function getSmdValue(row: ConceptSummaryRow, block: ChartBlockKey) {
   const value = row[`${CHART_BLOCK_FIELD_PREFIX[block]}Smd` as keyof ConceptSummaryRow] as
     | number
@@ -52,12 +63,41 @@ export function getChartMetricValue(
   return negLog10(row[`${prefix}PValue` as keyof ConceptSummaryRow] as number | null)
 }
 
+export function getEvidenceDirection(
+  row: ConceptSummaryRow,
+  block: ChartBlockKey,
+): EvidenceDirection {
+  if (block === "Categorical") return "unsigned"
+  const standardized = getSmdValue(row, block)
+  if (standardized != null && standardized !== 0) {
+    return standardized < 0 ? "negative" : "positive"
+  }
+  // Older exports may lack a standardized effect. Fall back to the ordinary effect, respecting
+  // the ratio neutral point used by Binary and Count analyses.
+  const effect = getChartMetricValue(row, block, "effectSize")
+  if (effect == null || !Number.isFinite(effect)) return "unsigned"
+  const centered = block === "Binary" || block === "Count" ? effect - 1 : effect
+  return centered < 0 ? "negative" : centered > 0 ? "positive" : "unsigned"
+}
+
 // For timing analyses, a negative effect means an earlier event. Reverse only the displayed
 // signed effect so earlier timing aligns visually with positive Binary/Count signals. The raw
 // result remains unchanged in the row data and detail views.
 export function getDisplayedEffectValue(value: number | null, block: ChartBlockKey) {
   if (value == null) return null
   return block === "Age" || block === "Days" ? -value : value
+}
+
+// Ordinary Binary and Count effects are ratios, so log-transform them to put their neutral value
+// (1) at the diverging scale's zero. Other analyses are already zero-centered. Timing effects keep
+// the viewer's display convention in which earlier occurrence in cases points in the positive hue.
+export function getDisplayedRawEffectValue(row: ConceptSummaryRow, block: ChartBlockKey) {
+  const value = getChartMetricValue(row, block, "effectSize")
+  if (value == null || !Number.isFinite(value)) return null
+  if (block === "Binary" || block === "Count") {
+    return value > 0 ? Math.log(value) : null
+  }
+  return getDisplayedEffectValue(value, block)
 }
 
 export function getBestHeatmapScore(row: ConceptSummaryRow) {

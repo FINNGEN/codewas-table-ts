@@ -32,9 +32,13 @@ import {
 import {
   computeHeatmapDerived,
   divergingColor,
+  evidenceDirectionColor,
+  getEvidenceDirection,
   getHeatmapHeaderLines,
   getDisplayedEffectValue,
+  getDisplayedRawEffectValue,
   matchesHeatmapSearch,
+  type EvidenceDirection,
 } from "./utils/heatmapUtils"
 import {
   bucketPatternLevel,
@@ -44,7 +48,7 @@ import {
   HEATMAP_LEVEL_COUNT,
   paintHeatmapCell,
 } from "./utils/heatmapPatterns"
-import PatternLegend from "./UI/PatternLegend"
+import EvidenceDirectionLegend from "./UI/EvidenceDirectionLegend"
 import { ChartAboutDialog } from "./ChartAboutDialog"
 import { buildHierarchyIndex } from "./utils/hierarchyUtils"
 import type {
@@ -91,8 +95,10 @@ const HORIZONTAL_GUTTER = 0
 // the row z-score in row-scaled mode. All-null in p-value mode, which paints from `maxLogp`.
 type SubtreeAgg = {
   ownLogp: (number | null)[]
+  ownPvalueDirection: EvidenceDirection[]
   ownColor: (number | null)[]
   maxLogp: (number | null)[]
+  maxPvalueDirection: EvidenceDirection[]
   maxLogpSource: (string | null)[]
   color: (number | null)[]
   colorSource: (string | null)[]
@@ -151,6 +157,10 @@ function selectedColor(agg: SubtreeAgg, mode: ParentCellMode) {
   return mode === "own" ? agg.ownColor : agg.color
 }
 
+function selectedPvalueDirection(agg: SubtreeAgg, mode: ParentCellMode) {
+  return mode === "own" ? agg.ownPvalueDirection : agg.maxPvalueDirection
+}
+
 // Read the value painted for this analysis, keeping the direction of an effect.
 function blockValue(agg: SubtreeAgg, block: number, metric: OverviewColorMetric, mode: ParentCellMode) {
   if (metric === "pValue") return selectedLogp(agg, mode)[block]
@@ -172,8 +182,10 @@ function overallScore(agg: SubtreeAgg, metric: OverviewColorMetric, mode: Parent
 
 const EMPTY_AGG: SubtreeAgg = {
   ownLogp: new Array<number | null>(HEATMAP_BLOCKS.length).fill(null),
+  ownPvalueDirection: new Array<EvidenceDirection>(HEATMAP_BLOCKS.length).fill("unsigned"),
   ownColor: new Array<number | null>(HEATMAP_BLOCKS.length).fill(null),
   maxLogp: new Array<number | null>(HEATMAP_BLOCKS.length).fill(null),
+  maxPvalueDirection: new Array<EvidenceDirection>(HEATMAP_BLOCKS.length).fill("unsigned"),
   maxLogpSource: new Array<string | null>(HEATMAP_BLOCKS.length).fill(null),
   color: new Array<number | null>(HEATMAP_BLOCKS.length).fill(null),
   colorSource: new Array<string | null>(HEATMAP_BLOCKS.length).fill(null),
@@ -204,12 +216,14 @@ function truncateToWidth(context: CanvasRenderingContext2D, text: string, maxWid
 
 const COLOR_METRIC_LABEL: Record<OverviewColorMetric, string> = {
   pValue: "max -log10(p)",
+  effect: "effect",
   smdRaw: "standardized effect",
   smdRowScaled: "row-scaled standardized effect",
 }
 
 const SORT_METRIC_LABEL: Record<OverviewColorMetric, string> = {
   pValue: "-log10(p)",
+  effect: "|effect|",
   smdRaw: "|standardized effect|",
   smdRowScaled: "|z|",
 }
@@ -407,11 +421,6 @@ function OverviewLevel({
       const block = HEATMAP_BLOCKS[b]
       const y = HEADER_WIDTH + b * ROW_HEIGHT
 
-      // Shared by every cell in the row: columns are data-width, so anchoring the texture to the
-      // plot's left edge is what lets a run of same-level columns read as one continuous field
-      // instead of restarting the pattern at each (fractional) column boundary.
-      const textureOrigin = { x: LABEL_WIDTH, y }
-
       for (let i = 0; i < shown.length; i++) {
         const x = LABEL_WIDTH + i * columnWidth
         if (colorMetric !== "pValue") {
@@ -429,15 +438,18 @@ function OverviewLevel({
           scaleMode === "global"
             ? bucketPatternLevel(value, bucketBreakpoints)
             : heatmapPatternLevel(value, perColumnMax[block])
-        paintHeatmapCell(
-          context,
-          level,
-          x,
-          y,
-          cellWidth,
-          ROW_HEIGHT - HORIZONTAL_GUTTER,
-          textureOrigin,
-        )
+        if (level == null || value == null) {
+          paintHeatmapCell(context, null, x, y, cellWidth, ROW_HEIGHT - HORIZONTAL_GUTTER)
+        } else {
+          const strength = scaleMode === "global"
+            ? (level + 0.5) / HEATMAP_LEVEL_COUNT
+            : value / perColumnMax[block]
+          context.fillStyle = evidenceDirectionColor(
+            strength,
+            selectedPvalueDirection(shown[i].agg, parentCellMode)[b],
+          )
+          context.fillRect(x, y, cellWidth, ROW_HEIGHT - HORIZONTAL_GUTTER)
+        }
       }
 
       context.fillStyle = canvasColors.gutterBg
@@ -800,8 +812,7 @@ function OverviewLevel({
   )
 }
 
-// Rail height for the bucket slider. Also what the texture swatches are fitted to, so each bucket
-// shows a whole number of tile rows.
+// Rail height for the global evidence-strength bucket slider.
 const BUCKET_RAIL_HEIGHT = 16
 
 function ColorRangeSlider({
@@ -823,7 +834,7 @@ function ColorRangeSlider({
         value={value}
         onChange={onChange}
         colors={colors}
-        // Rail buckets rendered with the same textures the cells use.
+        // When texture encoding is active, render rail buckets with the same cell patterns.
         segmentStyles={getBucketSegmentStyles(BUCKET_RAIL_HEIGHT)}
         segmentHeight={BUCKET_RAIL_HEIGHT}
         max={max}
@@ -879,9 +890,11 @@ function DivergingLegend({
         <Typography variant="caption">{capped ? ">= +" : "+"}{label}</Typography>
       </Stack>
       <Typography variant="caption" color="text.secondary">
-        {metric === "smdRowScaled"
-          ? "Standardized effect z-scored per analysis row"
-          : "Standardized effect, symmetric around zero"}
+        {metric === "effect"
+          ? "Effect, symmetric around its neutral value"
+          : metric === "smdRowScaled"
+            ? "Standardized effect z-scored per analysis row"
+            : "Standardized effect, symmetric around zero"}
         {capped ? ` | ${capMode.slice(1)}th-percentile cap` : " | uncapped"}
       </Typography>
       <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
@@ -914,7 +927,7 @@ function InfoModal({ colorMetric }: { colorMetric: OverviewColorMetric }) {
         narrows the plotted concepts by name, code, or ID.
       </Typography>
       <Typography variant="body2">
-        <b>Color by</b> chooses -log10(p), standardized effect, or row-scaled standardized effect.
+        <b>Color by</b> chooses -log10(p), effect, standardized effect, or row-scaled standardized effect.
         <b>Parent cell</b> chooses between the concept's own CodeWAS result and the strongest loaded
         result in its subtree. For example, a broad phenotype may have a modest result even when
         one specific diagnosis beneath it is strong; switching this control makes that distinction
@@ -922,8 +935,8 @@ function InfoModal({ colorMetric }: { colorMetric: OverviewColorMetric }) {
       </Typography>
       {colorMetric === "pValue" ? (
         <Typography variant="body2">
-          <b>Color scale</b> chooses per-analysis or global texture scaling. In Global mode, the
-          slider adjusts the texture thresholds.
+          <b>Color scale</b> chooses per-analysis or global evidence-intensity scaling. In Global
+          mode, the slider adjusts the -log10(p) intensity thresholds.
         </Typography>
       ) : (
         <Typography variant="body2">
@@ -946,6 +959,14 @@ function InfoModal({ colorMetric }: { colorMetric: OverviewColorMetric }) {
           remain available in the hover details and concept dialog.
         </Typography>
       )}
+      {colorMetric === "effect" && (
+        <Typography variant="body2">
+          Effect mode shows the ordinary analysis effect. Binary and Count ratios are log-transformed
+          for color so their neutral value of 1 is centered at zero. Other effects are centered at
+          zero. Timing direction is reversed for display so earlier occurrence in cases uses the
+          positive hue; the raw values remain unchanged in details.
+        </Typography>
+      )}
       {colorMetric === "smdRowScaled" && (
         <Typography variant="body2">
           Row-scaled colors show whether a value is below or above that analysis row's mean. For
@@ -956,9 +977,11 @@ function InfoModal({ colorMetric }: { colorMetric: OverviewColorMetric }) {
       {colorMetric === "pValue" && (
         <>
           <Typography variant="body2">
-            In p-value mode, denser texture means stronger -log10(p) evidence.
+            In p-value mode, hue shows the effect direction and intensity shows -log10(p) evidence.
+            Blue is negative, red is positive, and unsigned categorical results remain purple. In
+            subtree mode, both hue and intensity come from the same strongest result.
           </Typography>
-          <PatternLegend />
+          <EvidenceDirectionLegend />
         </>
       )}
       <Typography variant="body2">
@@ -1000,8 +1023,7 @@ export function DuckDbOverview({
   const [searchText, setSearchText] = useState("")
   // Drill path of parent rowKeys. Empty = only the roots panel. Each entry adds a child panel below.
   const [path, setPath] = useState<string[]>([])
-  // Breakpoints (in -log10 value units) for the global bucketed scale: one bucket per texture level,
-  // so HEATMAP_LEVEL_COUNT - 1 thumbs.
+  // Breakpoints (in -log10 value units) for the global bucketed intensity scale.
   const [breakpoints, setBreakpoints] = useState<number[]>([])
 
   const { perColumnMax, globalMax, derivedByKey, smdRowStats } = useMemo(
@@ -1011,9 +1033,16 @@ export function DuckDbOverview({
 
   // Diagnostic caps use the actual per-concept values, not subtree maxima (which would count one
   // outlier once per ancestor). The input is the same loaded/filtered chart population for all panels.
-  const { rawScaleStats, rowScaleStats } = useMemo(() => {
+  const { effectScaleStats: ordinaryEffectScaleStats, rawScaleStats, rowScaleStats } = useMemo(() => {
+    const effectValues: number[] = []
     const rawValues: number[] = []
     const rowValues: number[] = []
+    for (const row of rows) {
+      for (const block of HEATMAP_BLOCKS) {
+        const value = getDisplayedRawEffectValue(row, block)
+        if (value != null) effectValues.push(Math.abs(value))
+      }
+    }
     for (const derived of derivedByKey.values()) {
       for (let b = 0; b < derived.smd.length; b++) {
         const value = derived.smd[b]
@@ -1023,9 +1052,17 @@ export function DuckDbOverview({
         if (sd > 0) rowValues.push(Math.abs((value - mean) / sd))
       }
     }
-    return { rawScaleStats: effectScaleStats(rawValues), rowScaleStats: effectScaleStats(rowValues) }
-  }, [derivedByKey, smdRowStats])
-  const activeScaleStats = colorMetric === "smdRowScaled" ? rowScaleStats : rawScaleStats
+    return {
+      effectScaleStats: effectScaleStats(effectValues),
+      rawScaleStats: effectScaleStats(rawValues),
+      rowScaleStats: effectScaleStats(rowValues),
+    }
+  }, [derivedByKey, rows, smdRowStats])
+  const activeScaleStats = colorMetric === "effect"
+    ? ordinaryEffectScaleStats
+    : colorMetric === "smdRowScaled"
+      ? rowScaleStats
+      : rawScaleStats
   const colorRange = activeScaleStats[effectCapMode]
   const saturatedCount = activeScaleStats.values.reduce(
     (count, value) => count + Number(value > colorRange),
@@ -1064,14 +1101,20 @@ export function DuckDbOverview({
       const row = rowByKey.get(rowKey)
       const sourceLabel = row ? `${conceptLabel(row)} (${row.countMode})` : rowKey
       const maxLogpSource = ownLogp.map((value) => value == null ? null : sourceLabel)
+      const ownPvalueDirection = HEATMAP_BLOCKS.map((block) =>
+        row ? getEvidenceDirection(row, block) : "unsigned" as EvidenceDirection,
+      )
+      const maxPvalueDirection = [...ownPvalueDirection]
       // Row scaling uses the stats of the whole loaded population (not the search subset or one
       // panel), so a concept keeps its color while you search or drill.
       const ownColor: (number | null)[] = HEATMAP_BLOCKS.map((_, b) => {
+        if (colorMetric === "pValue") return null
+        if (colorMetric === "effect") {
+          return row ? getDisplayedRawEffectValue(row, HEATMAP_BLOCKS[b]) : null
+        }
         const smd = derived?.smd[b] ?? null
-        if (smd == null || colorMetric === "pValue") return null
-        const effect = colorMetric === "smdRaw"
-          ? smd
-          : (() => {
+        if (smd == null) return null
+        const effect = colorMetric === "smdRaw" ? smd : (() => {
               const { mean, sd } = smdRowStats[b]
               return sd > 0 ? (smd - mean) / sd : 0
             })()
@@ -1091,6 +1134,7 @@ export function DuckDbOverview({
             if (value != null && (maxLogp[b] == null || value > (maxLogp[b] as number))) {
               maxLogp[b] = value
               maxLogpSource[b] = childAgg.maxLogpSource[b]
+              maxPvalueDirection[b] = childAgg.maxPvalueDirection[b]
             }
             const childColor = childAgg.color[b]
             const own = color[b]
@@ -1102,7 +1146,17 @@ export function DuckDbOverview({
         }
         visiting.delete(rowKey)
       }
-      const result: SubtreeAgg = { ownLogp, ownColor, maxLogp, maxLogpSource, color, colorSource, count }
+      const result: SubtreeAgg = {
+        ownLogp,
+        ownPvalueDirection,
+        ownColor,
+        maxLogp,
+        maxPvalueDirection,
+        maxLogpSource,
+        color,
+        colorSource,
+        count,
+      }
       agg.set(rowKey, result)
       return result
     }
@@ -1218,6 +1272,7 @@ export function DuckDbOverview({
             >
               <MenuItem value="smdRaw">Standardized effect</MenuItem>
               <MenuItem value="smdRowScaled">Standardized effect (row-scaled)</MenuItem>
+              <MenuItem value="effect">Effect</MenuItem>
               <MenuItem value="pValue">p-value (-log10)</MenuItem>
             </Select>
           </FormControl>
@@ -1282,19 +1337,17 @@ export function DuckDbOverview({
               saturatedCount={saturatedCount}
             />
           ) : scaleMode === "global" ? (
-            <ColorRangeSlider
-              value={breakpoints}
-              onChange={setBreakpoints}
-              max={globalMax}
-              colors={HEATMAP_LEVEL_COLORS}
-              resetBreakpoints={resetBreakpoints}
-            />
-          ) : (
-            // Per-analysis mode has no thresholds to drag - just the texture key.
-            <Box sx={{ px: 1, pt: 1 }}>
-              <PatternLegend />
-            </Box>
-          )}
+            <Stack>
+              <ColorRangeSlider
+                value={breakpoints}
+                onChange={setBreakpoints}
+                max={globalMax}
+                colors={HEATMAP_LEVEL_COLORS}
+                resetBreakpoints={resetBreakpoints}
+              />
+              <EvidenceDirectionLegend />
+            </Stack>
+          ) : <EvidenceDirectionLegend />}
         </Grid>
       </Grid>
 

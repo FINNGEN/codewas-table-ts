@@ -28,17 +28,17 @@ import {
 import { AccountTree } from "@mui/icons-material"
 import { CHART_BLOCK_FIELD_PREFIX, HEATMAP_BLOCKS } from "./constants"
 import {
-  getHeatmapHeaderLines,
-  matchesHeatmapSearch,
-} from "./utils/heatmapUtils"
-import { heatmapPatternLevel, patternSwatchStyle } from "./utils/heatmapPatterns"
-import {
   clusterHeatmapRows,
   divergingColor,
+  evidenceDirectionColor,
   getChartMetricValue,
   getDisplayedEffectValue,
+  getEvidenceDirection,
+  getHeatmapHeaderLines,
+  matchesHeatmapSearch,
   type HeatmapDerived,
 } from "./utils/heatmapUtils"
+import { heatmapPatternLevel } from "./utils/heatmapPatterns"
 import { formatNumber, negLog10 } from "./utils/utils"
 import type {
   ChartBlockKey,
@@ -47,6 +47,7 @@ import type {
   HierarchySummaryRow,
 } from "./types"
 import { ChartAboutDialog } from "./ChartAboutDialog"
+import EvidenceDirectionLegend from "./UI/EvidenceDirectionLegend"
 
 const PRECOMPUTED_HIERARCHY_CUTOFF = 5
 // The detailed heatmap is an HTML table rather than a virtualized canvas. Keeping its rendered
@@ -708,9 +709,10 @@ export function DuckDbHeatmap2({
             <Typography variant="subtitle2" color="text.primary">Reading the plot</Typography>
             <Typography variant="body2">
               Each row is a concept and each column is an analysis type. Standardized effects and
-              effect sizes use diverging colors; -log10(p) uses a sequential scale. For Binary and
-              Count odds ratios, OR = 1 is neutral; for other effects, 0 is neutral. Hover over a
-              cell to see its exact value.
+              effect sizes use diverging colors. In -log10(p) mode, hue shows effect direction
+              (blue negative, red positive) and intensity shows statistical evidence; categorical
+              results are unsigned and remain purple. For Binary and Count odds ratios, OR = 1 is
+              neutral; for other effects, 0 is neutral. Hover over a cell to see its exact value.
             </Typography>
             <Typography variant="body2">
               <b>Example:</b> if Asthma is red in Binary and red in Days to First Event, the
@@ -777,8 +779,8 @@ export function DuckDbHeatmap2({
             <Typography variant="subtitle2" color="text.primary">Cell colors</Typography>
             <Typography variant="body2">
               <b>Show</b> chooses the displayed metric and defaults to Standardized effect.
-              Standardized effect and Effect size use a diverging scale; -log10(p) uses a
-              sequential scale. For Binary and Count odds ratios, OR = 1 is neutral; for other
+              Standardized effect and Effect size use a diverging scale. For -log10(p), hue shows
+              effect direction and intensity shows statistical evidence. For Binary and Count odds ratios, OR = 1 is neutral; for other
               effects, 0 is neutral. <b>Effect scale</b> controls the effect color range: Uncapped
               uses the full range, while percentile caps reduce the influence of extreme values.
             </Typography>
@@ -825,8 +827,8 @@ export function DuckDbHeatmap2({
 
             <Typography variant="subtitle2" color="text.primary">Cell colors</Typography>
             <Typography variant="body2">
-              The <b>Show</b> selector controls what the cell color represents. −log10(p) uses a
-              sequential scale, where stronger color means stronger statistical evidence. Effect
+              The <b>Show</b> selector controls what the cell color represents. For −log10(p), hue
+              shows effect direction and stronger intensity means stronger statistical evidence. Effect
               size and Standardized effect use a diverging scale, with opposite colors indicating
               opposite directions. For Binary and Count odds ratios, the neutral value is OR = 1;
               for other effects, the neutral value is 0. Effect colors can be uncapped or capped at
@@ -1006,6 +1008,12 @@ export function DuckDbHeatmap2({
                       const effectColor = metric === "-log10" || value == null
                         ? undefined
                         : divergingColor(value / (maxByBlock.get(block) ?? 1))
+                      const evidenceColor = metric === "-log10" && significance != null
+                        ? evidenceDirectionColor(
+                            significance / (maxByBlock.get(block) ?? 1),
+                            getEvidenceDirection(row, block),
+                          )
+                        : undefined
                       return (
                         <TableCell
                           key={block}
@@ -1016,11 +1024,10 @@ export function DuckDbHeatmap2({
                         >
                           <Box
                             sx={{
-                              ...(metric === "-log10" ? patternSwatchStyle(level ?? 0, 30) : {}),
                               ...(value == null
                                 ? { backgroundColor: "#ececec" }
                                 : metric === "-log10"
-                                  ? {}
+                                  ? { backgroundColor: evidenceColor }
                                   : { backgroundColor: effectColor }),
                               minHeight: 18,
                               display: "flex",
@@ -1115,6 +1122,7 @@ export function DuckDbHeatmap2({
                 default without hierarchy markers. Select Significant concepts (hierarchy) to focus
                 on concepts with at least one hierarchy-interesting marker.
               </Typography>
+              {metric === "-log10" && <EvidenceDirectionLegend />}
               {!showHierarchyMarkers && (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                   Hierarchy markers are hidden for the current <b>Significant concepts</b> view.
