@@ -68,6 +68,58 @@ const DIRECTION_COLORS: Record<EvidenceDirection, string> = {
   unsigned: dataHues.pvalue,
 }
 
+type DirectionGroup =
+  | "bothPositive"
+  | "bothNegative"
+  | "xPositiveYNegative"
+  | "xNegativeYPositive"
+  | "hasUnsigned"
+
+const DIRECTION_GROUPS: Array<{
+  key: DirectionGroup
+  label: string
+  xDirection: EvidenceDirection
+  yDirection: EvidenceDirection
+}> = [
+  {
+    key: "bothPositive",
+    label: "X positive / Y positive",
+    xDirection: "positive",
+    yDirection: "positive",
+  },
+  {
+    key: "bothNegative",
+    label: "X negative / Y negative",
+    xDirection: "negative",
+    yDirection: "negative",
+  },
+  {
+    key: "xPositiveYNegative",
+    label: "X positive / Y negative",
+    xDirection: "positive",
+    yDirection: "negative",
+  },
+  {
+    key: "xNegativeYPositive",
+    label: "X negative / Y positive",
+    xDirection: "negative",
+    yDirection: "positive",
+  },
+  {
+    key: "hasUnsigned",
+    label: "Unsigned/neutral on either axis",
+    xDirection: "unsigned",
+    yDirection: "unsigned",
+  },
+]
+
+function directionGroup(point: Pick<ScatterPoint, "xDirection" | "yDirection">): DirectionGroup {
+  if (point.xDirection === "unsigned" || point.yDirection === "unsigned") return "hasUnsigned"
+  if (point.xDirection === "positive" && point.yDirection === "positive") return "bothPositive"
+  if (point.xDirection === "negative" && point.yDirection === "negative") return "bothNegative"
+  return point.xDirection === "positive" ? "xPositiveYNegative" : "xNegativeYPositive"
+}
+
 function ScatterInfoModal() {
   return (
     <ChartAboutDialog title="Scatter plot">
@@ -101,6 +153,12 @@ function ScatterInfoModal() {
         axis, metric, or plot population clears the selection.
       </Typography>
       <Typography variant="body2">
+        The direction combinations in the legend are also filters. Click one combination to isolate
+        it, or click several to show their union. This is useful for finding concepts whose X and Y
+        effects disagree. With no combination selected, all directions are shown. The regression
+        line and rectangle selection use only the currently visible dots.
+      </Typography>
+      <Typography variant="body2">
         The regression slope (beta) and R-squared describe the displayed points; they do not
         establish causation. If more than 3,000 points qualify, a warning indicates that the plot
         is limited to 3,000.
@@ -131,6 +189,7 @@ export function DuckDbScatter({
   const [showRegression, setShowRegression] = useState(true)
   const [selectionEnabled, setSelectionEnabled] = useState(false)
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([])
+  const [activeDirectionGroups, setActiveDirectionGroups] = useState<DirectionGroup[]>([])
   const toggleRegression = () => setShowRegression((prev) => !prev)
 
   const allScatterPoints = useMemo<ScatterPoint[]>(
@@ -147,7 +206,23 @@ export function DuckDbScatter({
         .filter((row) => row.x != null && row.y != null),
     [metric, rows, xBlock, yBlock],
   )
-  const dataset = useMemo(() => allScatterPoints.slice(0, SCATTER_POINT_CAP), [allScatterPoints])
+  const directionGroupCounts = useMemo(() => {
+    const counts = Object.fromEntries(DIRECTION_GROUPS.map(({ key }) => [key, 0])) as Record<
+      DirectionGroup,
+      number
+    >
+    for (const point of allScatterPoints) counts[directionGroup(point)] += 1
+    return counts
+  }, [allScatterPoints])
+  const directionFilteredPoints = useMemo(() => {
+    if (activeDirectionGroups.length === 0) return allScatterPoints
+    const active = new Set(activeDirectionGroups)
+    return allScatterPoints.filter((point) => active.has(directionGroup(point)))
+  }, [activeDirectionGroups, allScatterPoints])
+  const dataset = useMemo(
+    () => directionFilteredPoints.slice(0, SCATTER_POINT_CAP),
+    [directionFilteredPoints],
+  )
   const selectedRowKeySet = useMemo(() => new Set(selectedRowKeys), [selectedRowKeys])
 
   useEffect(() => {
@@ -162,6 +237,12 @@ export function DuckDbScatter({
     const available = new Set(rows.map((row) => row.rowKey))
     setSelectedRowKeys((current) => current.filter((rowKey) => available.has(rowKey)))
   }, [rows])
+
+  useEffect(() => {
+    if (rows.length === 0) return
+    const visible = new Set(dataset.map((point) => point.id))
+    setSelectedRowKeys((current) => current.filter((rowKey) => visible.has(rowKey)))
+  }, [dataset, rows.length])
 
   const regression = useMemo(
     () => linearRegression(dataset as { x: number; y: number }[]),
@@ -284,10 +365,10 @@ export function DuckDbScatter({
       </Grid>
 
       {chartLoading && <Alert severity="info">Loading chart concepts from DuckDB...</Alert>}
-      {allScatterPoints.length > SCATTER_POINT_CAP && (
+      {directionFilteredPoints.length > SCATTER_POINT_CAP && (
         <Alert severity="warning">
-          Showing top {SCATTER_POINT_CAP} of {allScatterPoints.length} plotable concepts. Apply
-          filters to reduce the dataset.
+          Showing top {SCATTER_POINT_CAP} of {directionFilteredPoints.length} plottable concepts in
+          the selected direction groups. Apply filters to reduce the dataset.
         </Alert>
       )}
       {dataset.length === 0 ? (
@@ -345,6 +426,20 @@ export function DuckDbScatter({
           </ScatterChart>
         </Paper>
         <ScatterDirectionLegend
+          activeDirectionGroups={activeDirectionGroups}
+          directionGroupCounts={directionGroupCounts}
+          onToggleDirectionGroup={(group) => {
+            setActiveDirectionGroups((current) =>
+              current.includes(group)
+                ? current.filter((candidate) => candidate !== group)
+                : [...current, group],
+            )
+            setSelectedRowKeys([])
+          }}
+          onShowAllDirections={() => {
+            setActiveDirectionGroups([])
+            setSelectedRowKeys([])
+          }}
           selectionEnabled={selectionEnabled}
           selectedCount={selectedRowKeys.length}
           onToggleSelection={() => {
@@ -526,12 +621,14 @@ function RectangleSelectionOverlay({
 function LegendDot({
   xDirection,
   yDirection,
+  size = 18,
 }: {
   xDirection: EvidenceDirection
   yDirection: EvidenceDirection
+  size?: number
 }) {
   return (
-    <Box component="svg" viewBox="-6 -6 12 12" sx={{ width: 18, height: 18, flex: "0 0 auto" }}>
+    <Box component="svg" viewBox="-6 -6 12 12" sx={{ width: size, height: size, flex: "0 0 auto" }}>
       <path d="M 0 -5 A 5 5 0 0 0 0 5 Z" fill={DIRECTION_COLORS[xDirection]} />
       <path d="M 0 -5 A 5 5 0 0 1 0 5 Z" fill={DIRECTION_COLORS[yDirection]} />
       <circle cx="0" cy="0" r="5" fill="none" stroke="currentColor" strokeWidth="0.5" />
@@ -539,31 +636,34 @@ function LegendDot({
   )
 }
 
-function DirectionKey({ direction, label }: { direction: EvidenceDirection; label: string }) {
+function AllDirectionsIcon() {
   return (
-    <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
-      <Box
-        sx={{
-          width: 10,
-          height: 10,
-          borderRadius: "50%",
-          bgcolor: DIRECTION_COLORS[direction],
-          border: "1px solid",
-          borderColor: "divider",
-        }}
-      />
-      <Typography variant="caption">{label}</Typography>
-    </Stack>
+    <Box
+      sx={{ width: 18, height: 18, display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px" }}
+    >
+      <LegendDot xDirection="positive" yDirection="positive" size={8} />
+      <LegendDot xDirection="negative" yDirection="negative" size={8} />
+      <LegendDot xDirection="positive" yDirection="negative" size={8} />
+      <LegendDot xDirection="negative" yDirection="positive" size={8} />
+    </Box>
   )
 }
 
 function ScatterDirectionLegend({
+  activeDirectionGroups,
+  directionGroupCounts,
+  onToggleDirectionGroup,
+  onShowAllDirections,
   selectionEnabled,
   selectedCount,
   onToggleSelection,
   onClear,
   onOpen,
 }: {
+  activeDirectionGroups: DirectionGroup[]
+  directionGroupCounts: Record<DirectionGroup, number>
+  onToggleDirectionGroup: (group: DirectionGroup) => void
+  onShowAllDirections: () => void
   selectionEnabled: boolean
   selectedCount: number
   onToggleSelection: () => void
@@ -580,14 +680,73 @@ function ScatterDirectionLegend({
       }}
     >
       <Typography variant="subtitle2">Effect direction</Typography>
-      <Stack spacing={0.75} sx={{ mt: 1 }}>
-        <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
-          <LegendDot xDirection="negative" yDirection="positive" />
-          <Typography variant="caption">Left = X axis; right = Y axis</Typography>
-        </Stack>
-        <DirectionKey direction="positive" label="Positive" />
-        <DirectionKey direction="negative" label="Negative" />
-        <DirectionKey direction="unsigned" label="Unsigned or neutral" />
+      <Stack spacing={0.5} sx={{ mt: 1 }}>
+        <Button
+          size="small"
+          color="inherit"
+          variant={activeDirectionGroups.length === 0 ? "outlined" : "text"}
+          aria-pressed={activeDirectionGroups.length === 0}
+          onClick={onShowAllDirections}
+          startIcon={<AllDirectionsIcon />}
+          sx={{
+            justifyContent: "flex-start",
+            px: 0.75,
+            minHeight: 28,
+            bgcolor: activeDirectionGroups.length === 0 ? "action.selected" : "transparent",
+            textTransform: "none",
+            fontSize: "0.72rem",
+            lineHeight: 1.2,
+            "& .MuiButton-startIcon": { mr: 0.75 },
+          }}
+        >
+          <Box component="span" sx={{ flex: 1, textAlign: "left" }}>
+            All direction combinations
+          </Box>
+          <Box component="span" sx={{ ml: 0.75, color: "text.secondary" }}>
+            {Object.values(directionGroupCounts)
+              .reduce((sum, count) => sum + count, 0)
+              .toLocaleString()}
+          </Box>
+        </Button>
+        <Typography variant="caption" color="text.secondary" sx={{ px: 0.75, py: 0.25 }}>
+          Dot halves: left = X axis; right = Y axis. Click combinations to filter.
+        </Typography>
+        {DIRECTION_GROUPS.map((group) => {
+          const active = activeDirectionGroups.includes(group.key)
+          return (
+            <Button
+              key={group.key}
+              size="small"
+              color="inherit"
+              variant={active ? "outlined" : "text"}
+              aria-pressed={active}
+              onClick={() => onToggleDirectionGroup(group.key)}
+              startIcon={
+                <LegendDot
+                  xDirection={group.xDirection}
+                  yDirection={group.yDirection}
+                />
+              }
+              sx={{
+                justifyContent: "flex-start",
+                px: 0.75,
+                minHeight: 28,
+                bgcolor: active ? "action.selected" : "transparent",
+                textTransform: "none",
+                fontSize: "0.72rem",
+                lineHeight: 1.2,
+                "& .MuiButton-startIcon": { mr: 0.75 },
+              }}
+            >
+              <Box component="span" sx={{ flex: 1, textAlign: "left" }}>
+                {group.label}
+              </Box>
+              <Box component="span" sx={{ ml: 0.75, color: "text.secondary" }}>
+                {directionGroupCounts[group.key].toLocaleString()}
+              </Box>
+            </Button>
+          )
+        })}
       </Stack>
       <Divider sx={{ my: 1.5 }} />
       <Typography variant="subtitle2">Select concepts</Typography>
