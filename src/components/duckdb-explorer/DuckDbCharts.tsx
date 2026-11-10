@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from "react"
+import type { Dispatch, SetStateAction } from "react"
 import { FormControl, Grid, InputLabel, MenuItem, Select } from "@mui/material"
 import { DuckDbScatter } from "./DuckDbScatter"
 import type { ChartMode, ChartScope, ConceptSummaryRow, HierarchySummaryRow } from "./types"
@@ -14,6 +14,8 @@ export function DuckDbCharts({
   significanceCutoff,
   chartScope,
   setChartScope,
+  chartMode,
+  setChartMode,
   onSelectConcept,
   onOpenConceptSet,
 }: {
@@ -23,11 +25,11 @@ export function DuckDbCharts({
   significanceCutoff: number
   chartScope: ChartScope
   setChartScope: Dispatch<SetStateAction<ChartScope>>
+  chartMode: ChartMode
+  setChartMode: Dispatch<SetStateAction<ChartMode>>
   onSelectConcept: (rowKey: string) => void
   onOpenConceptSet: (selection: { label: string; rowKeys: string[] }) => void
 }) {
-  const [chartMode, setChartMode] = useState<ChartMode>("heatmap2")
-
   const sharedControls = (
     <>
       <Grid size={{ xs: 12, sm: 6, md: 3 }}>
@@ -90,6 +92,7 @@ export function DuckDbCharts({
       rows={rows}
       chartLoading={chartLoading}
       onSelectConcept={onSelectConcept}
+      onOpenConceptSet={onOpenConceptSet}
       sharedControls={sharedControls}
     />
   ) : chartMode === "findings" ? (

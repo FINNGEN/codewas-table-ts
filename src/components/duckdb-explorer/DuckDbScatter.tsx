@@ -1,7 +1,16 @@
-import { Fragment, useId, useMemo, useState, type ReactNode } from "react"
+import {
+  Fragment,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react"
 import {
   Alert,
   Box,
+  Button,
   Divider,
   FormControl,
   FormControlLabel,
@@ -20,20 +29,44 @@ import {
   ChartsTooltipContainer,
   rainbowSurgePalette,
   ScatterChart,
+  useDrawingArea,
   useItemTooltip,
-  useSeries,
   useXScale,
   useYScale,
+  type ScatterMarkerProps,
   type ScatterItemIdentifier,
 } from "@mui/x-charts"
+import { dataHues } from "../../theme"
 import { COLUMNS } from "../../utils/constants"
-import { CHART_BLOCK_FIELD_PREFIX, SCATTER_POINT_CAP } from "./constants"
-import { getChartMetricValue } from "./utils/heatmapUtils"
+import {
+  CHART_BLOCK_FIELD_PREFIX,
+  OVERVIEW_DIVERGING_NEGATIVE,
+  OVERVIEW_DIVERGING_POSITIVE,
+  SCATTER_POINT_CAP,
+} from "./constants"
+import {
+  getChartMetricValue,
+  getEvidenceDirection,
+  type EvidenceDirection,
+} from "./utils/heatmapUtils"
 import { negLog10 } from "./utils/utils"
 import type { ChartBlockKey, ChartMetricKey, ConceptSummaryRow } from "./types"
 import { ChartAboutDialog } from "./ChartAboutDialog"
 
-type ScatterPoint = { id: string; label: string; x: number | null; y: number | null }
+type ScatterPoint = {
+  id: string
+  label: string
+  x: number | null
+  y: number | null
+  xDirection: EvidenceDirection
+  yDirection: EvidenceDirection
+}
+
+const DIRECTION_COLORS: Record<EvidenceDirection, string> = {
+  positive: OVERVIEW_DIVERGING_POSITIVE,
+  negative: OVERVIEW_DIVERGING_NEGATIVE,
+  unsigned: dataHues.pvalue,
+}
 
 function ScatterInfoModal() {
   return (
@@ -49,13 +82,23 @@ function ScatterInfoModal() {
         For example, choose <b>Binary</b> on X, <b>Count</b> on Y, and <b>Standardized effect</b>
         to find concepts elevated in both analyses (upper right) or showing opposite directions.
         Choose <b>-log10(p)</b> instead to find concepts with strong evidence in both analyses;
-        position then does not show effect direction.
+        the split dot still shows effect direction even though position does not.
       </Typography>
       <Typography variant="subtitle2" color="text.primary">Reading the plot</Typography>
       <Typography variant="body2">
         Each dot is a concept result with values for both axes; results missing either value are
-        omitted. Standardized effects help compare analyses, but they remain analysis-specific
-        measures. Hover to inspect a dot and click it to open the detailed concept view.
+        omitted. The <b>left half</b> of a dot gives the X-axis effect direction and the <b>right
+        half</b> gives the Y-axis direction. Red is positive, blue is negative, and purple means
+        unsigned or neutral. Direction uses the standardized effect when available and otherwise
+        uses the ordinary effect relative to its null value (1 for Binary/Count ratios, 0 for the
+        other signed analyses). Categorical results are unsigned. Hover to inspect a dot and click
+        it to open the detailed concept view.
+      </Typography>
+      <Typography variant="body2">
+        Turn on <b>Rectangle select</b>, then drag across the plotting area. The selected dots are
+        outlined and can be opened together in the flat table. Selection applies only to dots
+        currently drawn in the scatter plot, including the 3,000-point display limit. Changing an
+        axis, metric, or plot population clears the selection.
       </Typography>
       <Typography variant="body2">
         The regression slope (beta) and R-squared describe the displayed points; they do not
@@ -70,11 +113,13 @@ export function DuckDbScatter({
   rows,
   chartLoading,
   onSelectConcept,
+  onOpenConceptSet,
   sharedControls,
 }: {
   rows: ConceptSummaryRow[]
   chartLoading: boolean
   onSelectConcept: (rowKey: string) => void
+  onOpenConceptSet: (selection: { label: string; rowKeys: string[] }) => void
   sharedControls: ReactNode
 }) {
   const [xBlock, setXBlock] = useState<ChartBlockKey>("Binary")
@@ -84,6 +129,8 @@ export function DuckDbScatter({
     metric === "-log10" ? "-log10(p)" : metric === "effectSize" ? "effect size" : "standardized effect"
 
   const [showRegression, setShowRegression] = useState(true)
+  const [selectionEnabled, setSelectionEnabled] = useState(false)
+  const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([])
   const toggleRegression = () => setShowRegression((prev) => !prev)
 
   const allScatterPoints = useMemo<ScatterPoint[]>(
@@ -94,11 +141,27 @@ export function DuckDbScatter({
           label: row.conceptName ?? String(row.conceptId),
           x: getChartMetricValue(row, xBlock, metric),
           y: getChartMetricValue(row, yBlock, metric),
+          xDirection: getEvidenceDirection(row, xBlock),
+          yDirection: getEvidenceDirection(row, yBlock),
         }))
         .filter((row) => row.x != null && row.y != null),
     [metric, rows, xBlock, yBlock],
   )
   const dataset = useMemo(() => allScatterPoints.slice(0, SCATTER_POINT_CAP), [allScatterPoints])
+  const selectedRowKeySet = useMemo(() => new Set(selectedRowKeys), [selectedRowKeys])
+
+  useEffect(() => {
+    setSelectedRowKeys([])
+  }, [metric, xBlock, yBlock])
+
+  useEffect(() => {
+    // Table view deliberately clears chart rows to avoid background DuckDB/chart work. Preserve the
+    // current selection across that temporary empty state, then discard only keys that are truly no
+    // longer in the reloaded plot population.
+    if (rows.length === 0) return
+    const available = new Set(rows.map((row) => row.rowKey))
+    setSelectedRowKeys((current) => current.filter((rowKey) => available.has(rowKey)))
+  }, [rows])
 
   const regression = useMemo(
     () => linearRegression(dataset as { x: number; y: number }[]),
@@ -127,6 +190,20 @@ export function DuckDbScatter({
       )
     }
   }, [dataset, rowsByKey, xBlock, yBlock, metric])
+
+  const DirectionMarker = useMemo(() => {
+    return function DirectionMarker(props: ScatterMarkerProps) {
+      const point = dataset[props.dataIndex]
+      return (
+        <SplitDirectionMarker
+          {...props}
+          xDirection={point?.xDirection ?? "unsigned"}
+          yDirection={point?.yDirection ?? "unsigned"}
+          selected={point ? selectedRowKeySet.has(point.id) : false}
+        />
+      )
+    }
+  }, [dataset, selectedRowKeySet])
 
   return (
     <Stack spacing={3}>
@@ -216,7 +293,16 @@ export function DuckDbScatter({
       {dataset.length === 0 ? (
         <Alert severity="info">No rows have both selected metrics available.</Alert>
       ) : (
-        <Paper sx={{ width: "100%", height: 500, p: 1 }}>
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: { xs: "column", lg: "row" },
+            alignItems: "stretch",
+            gap: 1.5,
+            width: "100%",
+          }}
+        >
+        <Paper sx={{ flex: 1, minWidth: 0, height: 500, p: 1 }}>
           <ScatterChart
             dataset={dataset}
             series={[
@@ -238,9 +324,11 @@ export function DuckDbScatter({
               },
             ]}
             height={460}
+            hideLegend
             hitAreaRadius="item"
-            slots={{ tooltip: ConceptTooltip }}
+            slots={{ tooltip: ConceptTooltip, marker: DirectionMarker }}
             onItemClick={(_: unknown, d: ScatterItemIdentifier) => {
+              if (selectionEnabled) return
               const point = dataset[d.dataIndex]
               if (point) onSelectConcept(point.id)
             }}
@@ -248,11 +336,282 @@ export function DuckDbScatter({
             {showRegression && (
               <RegressionLine seriesId="has-value" fit={regression} colorIndex={2} />
             )}
-            <HoveredPointHighlight dataset={dataset} />
+            {!selectionEnabled && <HoveredPointHighlight dataset={dataset} />}
+            <RectangleSelectionOverlay
+              active={selectionEnabled}
+              dataset={dataset}
+              onSelectionChange={setSelectedRowKeys}
+            />
           </ScatterChart>
         </Paper>
+        <ScatterDirectionLegend
+          selectionEnabled={selectionEnabled}
+          selectedCount={selectedRowKeys.length}
+          onToggleSelection={() => {
+            setSelectionEnabled((current) => !current)
+            setSelectedRowKeys([])
+          }}
+          onClear={() => setSelectedRowKeys([])}
+          onOpen={() =>
+            onOpenConceptSet({
+              label: `Scatter: ${blockLabel(xBlock)} vs ${blockLabel(yBlock)}`,
+              rowKeys: selectedRowKeys,
+            })
+          }
+        />
+        </Box>
       )}
     </Stack>
+  )
+}
+
+function SplitDirectionMarker({
+  x,
+  y,
+  size,
+  isHighlighted,
+  isFaded,
+  onClick,
+  xDirection,
+  yDirection,
+  selected,
+}: ScatterMarkerProps & {
+  xDirection: EvidenceDirection
+  yDirection: EvidenceDirection
+  selected: boolean
+}) {
+  const theme = useTheme()
+  const radius = (isHighlighted ? 1.2 : 1) * size
+  return (
+    <g
+      transform={`translate(${x}, ${y})`}
+      opacity={isFaded ? 0.3 : 1}
+      cursor={onClick ? "pointer" : "default"}
+      onClick={onClick}
+    >
+      <path
+        d={`M 0 ${-radius} A ${radius} ${radius} 0 0 0 0 ${radius} Z`}
+        fill={DIRECTION_COLORS[xDirection]}
+      />
+      <path
+        d={`M 0 ${-radius} A ${radius} ${radius} 0 0 1 0 ${radius} Z`}
+        fill={DIRECTION_COLORS[yDirection]}
+      />
+      <circle
+        cx={0}
+        cy={0}
+        r={selected ? radius + 2 : radius}
+        fill="none"
+        stroke={selected ? theme.palette.text.primary : theme.palette.divider}
+        strokeWidth={selected ? 2 : 0.75}
+        pointerEvents="none"
+      />
+    </g>
+  )
+}
+
+function RectangleSelectionOverlay({
+  active,
+  dataset,
+  onSelectionChange,
+}: {
+  active: boolean
+  dataset: ScatterPoint[]
+  onSelectionChange: (rowKeys: string[]) => void
+}) {
+  const theme = useTheme()
+  const drawingArea = useDrawingArea()
+  const xScale = useXScale()
+  const yScale = useYScale()
+  const [start, setStart] = useState<{ x: number; y: number } | null>(null)
+  const [current, setCurrent] = useState<{ x: number; y: number } | null>(null)
+
+  const pointerPosition = (event: ReactPointerEvent<SVGRectElement>) => {
+    const svg = event.currentTarget.ownerSVGElement
+    if (!svg) return null
+    const matrix = svg.getScreenCTM()
+    if (!matrix) return null
+    const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse())
+    return {
+      x: Math.max(drawingArea.left, Math.min(drawingArea.left + drawingArea.width, point.x)),
+      y: Math.max(drawingArea.top, Math.min(drawingArea.top + drawingArea.height, point.y)),
+    }
+  }
+
+  const finishSelection = (end: { x: number; y: number } | null) => {
+    if (!start || !end) {
+      setStart(null)
+      setCurrent(null)
+      return
+    }
+    const left = Math.min(start.x, end.x)
+    const right = Math.max(start.x, end.x)
+    const top = Math.min(start.y, end.y)
+    const bottom = Math.max(start.y, end.y)
+    if (right - left < 3 || bottom - top < 3) {
+      onSelectionChange([])
+    } else {
+      onSelectionChange(
+        dataset
+          .filter((point) => {
+            if (point.x == null || point.y == null) return false
+            const px = xScale(point.x)
+            const py = yScale(point.y)
+            return px != null && py != null && px >= left && px <= right && py >= top && py <= bottom
+          })
+          .map((point) => point.id),
+      )
+    }
+    setStart(null)
+    setCurrent(null)
+  }
+
+  const selectionRect =
+    start && current
+      ? {
+          x: Math.min(start.x, current.x),
+          y: Math.min(start.y, current.y),
+          width: Math.abs(current.x - start.x),
+          height: Math.abs(current.y - start.y),
+        }
+      : null
+
+  return (
+    <g>
+      <rect
+        x={drawingArea.left}
+        y={drawingArea.top}
+        width={drawingArea.width}
+        height={drawingArea.height}
+        fill="transparent"
+        pointerEvents={active ? "all" : "none"}
+        cursor={active ? "crosshair" : "default"}
+        onPointerDown={(event) => {
+          if (!active || event.button !== 0) return
+          const point = pointerPosition(event)
+          if (!point) return
+          event.currentTarget.setPointerCapture(event.pointerId)
+          setStart(point)
+          setCurrent(point)
+        }}
+        onPointerMove={(event) => {
+          if (!start) return
+          const point = pointerPosition(event)
+          if (point) setCurrent(point)
+        }}
+        onPointerUp={(event) => {
+          if (!start) return
+          finishSelection(pointerPosition(event))
+        }}
+        onPointerCancel={() => {
+          setStart(null)
+          setCurrent(null)
+        }}
+      />
+      {selectionRect && (
+        <rect
+          {...selectionRect}
+          fill={theme.palette.primary.main}
+          fillOpacity={0.12}
+          stroke={theme.palette.primary.main}
+          strokeWidth={1.5}
+          strokeDasharray="5 3"
+          pointerEvents="none"
+        />
+      )}
+    </g>
+  )
+}
+
+function LegendDot({
+  xDirection,
+  yDirection,
+}: {
+  xDirection: EvidenceDirection
+  yDirection: EvidenceDirection
+}) {
+  return (
+    <Box component="svg" viewBox="-6 -6 12 12" sx={{ width: 18, height: 18, flex: "0 0 auto" }}>
+      <path d="M 0 -5 A 5 5 0 0 0 0 5 Z" fill={DIRECTION_COLORS[xDirection]} />
+      <path d="M 0 -5 A 5 5 0 0 1 0 5 Z" fill={DIRECTION_COLORS[yDirection]} />
+      <circle cx="0" cy="0" r="5" fill="none" stroke="currentColor" strokeWidth="0.5" />
+    </Box>
+  )
+}
+
+function DirectionKey({ direction, label }: { direction: EvidenceDirection; label: string }) {
+  return (
+    <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
+      <Box
+        sx={{
+          width: 10,
+          height: 10,
+          borderRadius: "50%",
+          bgcolor: DIRECTION_COLORS[direction],
+          border: "1px solid",
+          borderColor: "divider",
+        }}
+      />
+      <Typography variant="caption">{label}</Typography>
+    </Stack>
+  )
+}
+
+function ScatterDirectionLegend({
+  selectionEnabled,
+  selectedCount,
+  onToggleSelection,
+  onClear,
+  onOpen,
+}: {
+  selectionEnabled: boolean
+  selectedCount: number
+  onToggleSelection: () => void
+  onClear: () => void
+  onOpen: () => void
+}) {
+  return (
+    <Paper
+      variant="outlined"
+      sx={{
+        width: { xs: "100%", lg: 230 },
+        flex: { lg: "0 0 230px" },
+        p: 1.5,
+      }}
+    >
+      <Typography variant="subtitle2">Effect direction</Typography>
+      <Stack spacing={0.75} sx={{ mt: 1 }}>
+        <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
+          <LegendDot xDirection="negative" yDirection="positive" />
+          <Typography variant="caption">Left = X axis; right = Y axis</Typography>
+        </Stack>
+        <DirectionKey direction="positive" label="Positive" />
+        <DirectionKey direction="negative" label="Negative" />
+        <DirectionKey direction="unsigned" label="Unsigned or neutral" />
+      </Stack>
+      <Divider sx={{ my: 1.5 }} />
+      <Typography variant="subtitle2">Select concepts</Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+        Turn on selection, then drag a rectangle over the plot.
+      </Typography>
+      <Stack spacing={0.75} sx={{ mt: 1 }}>
+        <Button
+          size="small"
+          variant={selectionEnabled ? "contained" : "outlined"}
+          onClick={onToggleSelection}
+        >
+          {selectionEnabled ? "Selecting: drag on plot" : "Rectangle select"}
+        </Button>
+        <Button size="small" variant="outlined" disabled={selectedCount === 0} onClick={onOpen}>
+          Open {selectedCount || "selected"} in table
+        </Button>
+        {selectedCount > 0 && (
+          <Button size="small" color="inherit" onClick={onClear}>
+            Clear selection
+          </Button>
+        )}
+      </Stack>
+    </Paper>
   )
 }
 
@@ -268,11 +627,9 @@ function RegressionLine({
   const theme = useTheme()
   const palette = rainbowSurgePalette(theme.palette.mode)
   const stroke = palette[colorIndex]
-  const allSeries = useSeries()
-  const series = allSeries.scatter!.series[seriesId]!
-  const xScale = useXScale(series.xAxisId!)
-  const yScale = useYScale(series.yAxisId!)
-  const clipPathId = `linear-regression-clip-${useId()}`
+  const xScale = useXScale()
+  const yScale = useYScale()
+  const clipPathId = `linear-regression-clip-${seriesId}-${useId()}`
 
   const { m, b } = fit
 
@@ -323,6 +680,14 @@ const CATEGORICAL_BLOCKS: ChartBlockKey[] = ["Binary", "Categorical"]
 
 function blockLabel(block: ChartBlockKey) {
   return COLUMNS.find((column) => column.key === block)?.label ?? block
+}
+
+function directionLabel(direction: EvidenceDirection) {
+  return direction === "positive"
+    ? "positive"
+    : direction === "negative"
+      ? "negative"
+      : "unsigned/neutral"
 }
 
 function readNumber(row: ConceptSummaryRow, field: string): number | null {
@@ -456,6 +821,16 @@ function ConceptTooltipContent({
       <Typography variant="caption" color="text.secondary">
         {[row.conceptCode, row.domainId, `#${row.conceptId}`].filter(Boolean).join(" · ")}
       </Typography>
+      <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", mt: 0.75 }}>
+        <LegendDot
+          xDirection={getEvidenceDirection(row, xBlock)}
+          yDirection={getEvidenceDirection(row, yBlock)}
+        />
+        <Typography variant="caption">
+          X: {directionLabel(getEvidenceDirection(row, xBlock))}; Y:{" "}
+          {directionLabel(getEvidenceDirection(row, yBlock))}
+        </Typography>
+      </Stack>
 
       {blocks.map((block) => {
         const detail = getBlockDetail(row, block)

@@ -62,6 +62,7 @@ import { buildColumns } from "./tableColumns"
 import type {
   AiFilter,
   BlockMetricRow,
+  ChartMode,
   ChartScope,
   CohortInfoIndex,
   ConceptSummaryRow,
@@ -126,6 +127,9 @@ export default function DuckDbExplorer({
   const [exportLoading, setExportLoading] = useState(false)
   const [chartLoading, setChartLoading] = useState(false)
   const [chartScope, setChartScope] = useState<ChartScope>("filtered")
+  // Keep the selected plot type alongside the explorer's Table/Charts navigation state. The chart
+  // tree below stays mounted to preserve each plot's remaining local controls across view switches.
+  const [chartMode, setChartMode] = useState<ChartMode>("heatmap2")
   const [tableLoading, setTableLoading] = useState(false)
   const [hierarchyLoading, setHierarchyLoading] = useState(false)
   const [tableMode, setTableMode] = useState<TableMode>("flat")
@@ -831,7 +835,7 @@ export default function DuckDbExplorer({
                 setTableConceptSet(null)
                 setPagination((current) => ({ ...current, pageIndex: 0 }))
               }}
-              title="Showing only concepts from the selected Findings overview cluster"
+              title="Showing only concepts from the selected chart concept set"
               sx={{ maxWidth: 360 }}
             />
           )}
@@ -1019,20 +1023,30 @@ export default function DuckDbExplorer({
         <Box
           sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "auto" }}
         >
-          {pageView === "charts" && (
-            <Box sx={{ display: "flex", flex: 1, minHeight: 0, flexDirection: "column" }}>
-              <DuckDbCharts
-                rows={chartRows}
-                hierarchySummaryRows={hierarchySummaryRows}
-                chartLoading={chartLoading}
-                significanceCutoff={significanceCutoff}
-                chartScope={chartScope}
-                setChartScope={setChartScope}
-                onSelectConcept={focusRow}
-                onOpenConceptSet={openConceptSetInTable}
-              />
-            </Box>
-          )}
+          {/* Keep the chart tree mounted so every plot's local controls survive a Table round-trip.
+              The chart-row effects above still clear data and skip DuckDB queries off the Charts
+              page, so hidden plots retain only lightweight UI state and render no result rows. */}
+          <Box
+            sx={{
+              display: pageView === "charts" ? "flex" : "none",
+              flex: 1,
+              minHeight: 0,
+              flexDirection: "column",
+            }}
+          >
+            <DuckDbCharts
+              rows={chartRows}
+              hierarchySummaryRows={hierarchySummaryRows}
+              chartLoading={chartLoading}
+              significanceCutoff={significanceCutoff}
+              chartScope={chartScope}
+              setChartScope={setChartScope}
+              chartMode={chartMode}
+              setChartMode={setChartMode}
+              onSelectConcept={focusRow}
+              onOpenConceptSet={openConceptSetInTable}
+            />
+          </Box>
           <Box
             sx={{
               display: pageView === "table" ? "flex" : "none",
